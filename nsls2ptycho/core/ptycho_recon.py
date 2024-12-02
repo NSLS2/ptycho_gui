@@ -8,10 +8,155 @@ from fcntl import fcntl, F_GETFL, F_SETFL
 from os import O_NONBLOCK
 import numpy as np
 import traceback
+import time
 
 from .databroker_api import load_metadata, save_data
 from .utils import use_mpi_machinefile, set_flush_early
+from .ptycho.utils import save_config
 
+class PtychoReconRemote(QtCore.QThread):
+    update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)
+
+    def __init__(self, param:Param=None, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.param = param
+
+        self.return_value = None
+
+        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv)
+        if not os.path.isdir(self.remote_path):
+            os.mkdir(self.remote_path)
+
+        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
+        if not os.path.isfile(self.msg_file):
+            with open(self.msg_file,'w') as f:
+                pass
+        self.msg = open(self.msg_file,'r')
+        self.msg.readlines()
+
+    def _parse_message(self, tokens):
+        def _parser(current, upper_limit, target_list):
+            for j in range(upper_limit):
+                target_list.append(float(tokens[current+2+j]))
+    
+        # assuming tokens (stdout line) is split but not yet processed
+        it = int(tokens[2])
+        
+        # first remove brackets
+        empty_index_list = []
+        for i, token in enumerate(tokens):
+            tokens[i] = token.replace('[', '').replace(']', '')
+            if tokens[i] == '':
+                empty_index_list.append(i)
+        counter = 0
+        for i in empty_index_list:
+            del tokens[i-counter]
+            counter += 1
+
+        # next parse based on param and the known format
+        prb_list = []
+        obj_list = []
+        for i, token in enumerate(tokens):
+            if token == 'probe_chi':
+                if self.param.mode_flag:
+                    _parser(i, self.param.prb_mode_num, prb_list)
+                #elif self.param.multislice_flag: 
+                #TODO: maybe multislice will have multiple prb in the future?
+                else:
+                    _parser(i, 1, prb_list)
+            if token == 'object_chi':
+                if self.param.mode_flag:
+                    _parser(i, self.param.obj_mode_num, obj_list)
+                elif self.param.multislice_flag:
+                    _parser(i, self.param.slice_num, obj_list)
+                else:
+                    _parser(i, 1, obj_list)
+
+        # return a dictionary
+        result = {'probe_chi':prb_list, 'object_chi':obj_list}
+
+        return it, result
+
+    def _test_stdout_completeness(self, stdout):
+        counter = 0
+        for token in stdout:
+            if token == '=':
+                counter += 1
+
+        return counter
+
+    def _parse_one_line(self):
+        stdout_2 = self.process.stdout.readline().decode('utf-8')
+        print(stdout_2, end='') # because the line already ends with '\n'
+
+        return stdout_2.split()
+
+    def recon_remote(self, param:Param, update_fcn=None):
+
+        self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign)
+        
+        if param.working_directory:
+            param.working_directory = os.path.realpath(param.working_directory)+'/'
+        if param.prb_dir:
+            param.prb_dir = os.path.realpath(param.prb_dir)+'/'
+        if param.prb_path:
+            param.prb_path = os.path.realpath(param.prb_path)
+        if param.obj_dir:
+            param.obj_dir = os.path.realpath(param.obj_dir)+'/'
+        if param.obj_path:
+            param.obj_path = os.path.realpath(param.obj_path)
+        
+        save_config(self.fname_full,param)
+
+        self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
+
+        # try:
+        while True:
+            out = self.msg.readlines()
+            
+            for line in out:
+                print(line, end='') # because the line already ends with '\n'
+                tokens = line.split()
+                if len(tokens) > 2 and tokens[0] == "[INFO]" and update_fcn is not None:
+                    it, result = self._parse_message(tokens)
+                    self.parent.it_last = it
+                    update_fcn(it+1, result)
+                    #print(result['probe_chi'])
+                if 'aborted' in line:
+                    self.return_value = 1 # Aborted
+            
+            if not os.path.isfile(self.fname_full):
+                break
+            
+            time.sleep(0.1)
+        # except:
+        #     pass
+        # finally:
+        #     pass
+
+    def run(self):
+        print('Ptycho thread started')
+        try:
+            self.recon_remote(self.param, self.update_signal.emit)
+        except IndexError:
+            print("[ERROR] IndexError --- most likely a wrong MPI machine file is given?", file=sys.stderr)
+        except:
+            # whatever happened in the MPI processes will always (!) generate traceback,
+            # so do nothing here
+            pass
+        else:
+            # let preview window load results
+            if self.param.preview_flag and self.return_value==0:
+                self.update_signal.emit(self.param.n_iterations+1,None)
+            
+        finally:
+            print('finally?')
+
+    def kill(self):
+        if os.path.isdir(self.remote_path):
+            with open(os.path.join(self.remote_path,'abort'),'w') as f:
+                pass
 
 class PtychoReconWorker(QtCore.QThread):
     update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)

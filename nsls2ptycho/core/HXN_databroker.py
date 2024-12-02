@@ -304,7 +304,7 @@ def load_metadata(db, scan_num:int, det_name:str):
                 except:
                     angle = 0
             ic = np.zeros(num_frame)
-            ic[:] = db.reg.retrieve(df[ic_chan].iat[0])
+            ic[:] = np.resize(db.reg.retrieve(df[ic_chan].iat[0]),num_frame)
             array_ensure_positive_elements(ic, name="scaler")
 
             # get ccd_pixel_um
@@ -628,17 +628,26 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
         os.symlink(os.path.realpath(file_path), symlink_path)
     except FileExistsError:
         os.remove(symlink_path)
-        os.symlink(file_path, symlink_path)
+        os.symlink(os.path.realpath(file_path), symlink_path)
 
 
 def get_single_image(db, frame_num, mds_table):
     length = mds_table.size
-    if frame_num >= length:
+    if length == 1:
+        if frame_num == -1:
+            img_raw = db.reg.retrieve(mds_table.iat[0])
+        else:
+            dataset = db.reg.get_spec_handler(mds_table.iat[0].split('/')[0]).dataset()
+            nframes = dataset.shape[0]
+            if frame_num >= nframes:
+                message = "[ERROR] The {0}-th frame doesn't exist. "
+                message += "Available frames for the chosen scan: [0, {1}]."
+                raise ValueError(message.format(frame_num, nframes-1))
+            img_raw = np.array((dataset[frame_num],),dtype=dataset.dtype)
+    elif frame_num >= length:
         message = "[ERROR] The {0}-th frame doesn't exist. "
         message += "Available frames for the chosen scan: [0, {1}]."
         raise ValueError(message.format(frame_num, length-1))
-    elif length == 1:
-        img_raw = db.reg.retrieve(mds_table.iat[frame_num])
     elif frame_num == -1:
         img_single = db.reg.retrieve(mds_table.iat[0])
         img_raw = np.zeros((length,)+img_single.shape[1:],dtype = img_single.dtype)

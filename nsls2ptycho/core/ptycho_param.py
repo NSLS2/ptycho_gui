@@ -83,6 +83,7 @@ class Param(object):
         self.pha_max = 0.01  # up/low limit of allowed object phase range
         self.pha_min = -1.0  #
 
+        self.remote_srv = ''      # remote srv name to use
         self.gpu_flag = True      # whether to use GPU
         self.gpus = [0, 1]        # should be a list of gpu numbers, ex: [0, 2, 3]
         self.gpu_batch_size = 256 # should be 4^n, ex: 4, 16, 64, 256, 1024, 4096, ...

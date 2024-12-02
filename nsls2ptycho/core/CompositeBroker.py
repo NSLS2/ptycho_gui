@@ -3,7 +3,6 @@ from databroker.headersource.mongo import MDS
 from databroker.assets.mongo import Registry
 from databroker.headersource.core import doc_or_uid_to_uid
 from databroker.assets.handlers import HandlerBase
-#from hxntools.handlers import register
 from jsonschema import validate as js_validate
 from bluesky_kafka import Publisher
 from collections import deque
@@ -487,5 +486,8 @@ db.reg.register_handler(TimepixHDF5Handler._handler_name,
                             TimepixHDF5Handler, overwrite=True)
 db.reg.register_handler(ROIHDF5Handler.HANDLER_NAME, ROIHDF5Handler, overwrite=True)
 
-
-#register(db)
+try:
+    from hxntools.handlers import register
+    register(db)
+except:
+    pass

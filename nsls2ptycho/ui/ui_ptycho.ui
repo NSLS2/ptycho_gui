@@ -1086,6 +1086,16 @@
         <item>
          <layout class="QHBoxLayout" name="horizontalLayout_5">
           <item>
+           <widget class="QLabel" name="label_53">
+            <property name="text">
+             <string>  Remote Srv</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLineEdit" name="le_remote_srv"/>
+          </item>
+          <item>
            <widget class="QCheckBox" name="ck_gpu_flag">
             <property name="layoutDirection">
              <enum>Qt::RightToLeft</enum>

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'ui_ptycho.ui'
+# Form implementation generated from reading ui file './ui_ptycho.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.7
 #
@@ -468,6 +468,12 @@ class Ui_MainWindow(object):
         self.verticalLayout.addLayout(self.horizontalLayout_3)
         self.horizontalLayout_5 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_5.setObjectName("horizontalLayout_5")
+        self.label_53 = QtWidgets.QLabel(self.tab)
+        self.label_53.setObjectName("label_53")
+        self.horizontalLayout_5.addWidget(self.label_53)
+        self.le_remote_srv = QtWidgets.QLineEdit(self.tab)
+        self.le_remote_srv.setObjectName("le_remote_srv")
+        self.horizontalLayout_5.addWidget(self.le_remote_srv)
         self.ck_gpu_flag = QtWidgets.QCheckBox(self.tab)
         self.ck_gpu_flag.setLayoutDirection(QtCore.Qt.RightToLeft)
         self.ck_gpu_flag.setChecked(True)
@@ -1245,6 +1251,7 @@ class Ui_MainWindow(object):
         self.label_16.setText(_translate("MainWindow", "Phase:"))
         self.label_34.setText(_translate("MainWindow", "min"))
         self.label_33.setText(_translate("MainWindow", "max"))
+        self.label_53.setText(_translate("MainWindow", "  Remote Srv"))
         self.ck_gpu_flag.setText(_translate("MainWindow", "GPU:"))
         self.le_gpus.setToolTip(_translate("MainWindow", "Set the GPUs to be used. Example: 0, 2-3, 5"))
         self.le_gpus.setText(_translate("MainWindow", "0,1"))

@@ -211,20 +211,20 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             if it <= self.current_max_iters and prb_idx < self.prb_num:
                 # the factor of 2 below is due to two kind of functions being applied to obj (angle and abs)
                 image = images_to_show[2*(prb_idx+self.obj_num)+offset]
-            elif it > self.current_max_iters and prb_idx >= self.prb_num:
+            elif it > self.current_max_iters:
                 # ptycho completes, perform post processing
                 # the factor of 2 below is due to two kind of functions being applied to obj (angle and abs)
-                image = images_to_show[2*(prb_idx+self.result_type_num*self.obj_num-self.prb_num)+offset]
+                image = images_to_show[2*(prb_idx+self.result_type_num*self.obj_num)+offset]
         elif flag.startswith('obj'):
             obj_idx = self.cb_image_object.currentIndex()
             offset = 0 if flag.endswith('pha') else 1
             if it <= self.current_max_iters and obj_idx < self.obj_num:
                 # the factor of 2 below is due to two kind of functions being applied to obj (angle and abs)
                 image = images_to_show[2*obj_idx+offset]
-            elif it > self.current_max_iters and obj_idx >= self.obj_num:
+            elif it > self.current_max_iters:
                 # ptycho completes, perform post processing
                 # the factor of 2 below is due to two kind of functions being applied to obj (angle and abs)
-                image = images_to_show[2*(obj_idx-self.obj_num)+offset]
+                image = images_to_show[2*(obj_idx)+offset]
         else:
             # shouldn't happen!
             pass
