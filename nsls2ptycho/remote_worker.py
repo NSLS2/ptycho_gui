@@ -164,8 +164,8 @@ class recon_worker:
                         if len(tokens) > 2 and tokens[0] == "[INFO]":
                             it = int(tokens[2])
                             if (it-1) % self.p.display_interval == 0:
-                                np.save(os.path.join(self.monitor_path,'prb_live.npy'),self._prb)
-                                np.save(os.path.join(self.monitor_path,'obj_live.npy'),self._obj)
+                                np.save(os.path.join(self.monitor_path,'prb_live.npy'),self._prb[it-1])
+                                np.save(os.path.join(self.monitor_path,'obj_live.npy'),self._obj[it-1])
                         if len(tokens) == 3 and tokens[0] == "shared":
                             self.init_mmap()
 
