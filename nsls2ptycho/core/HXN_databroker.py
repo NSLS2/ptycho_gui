@@ -580,6 +580,7 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
                 raw_data_frame_counts.append(1)
             else:
                 raw_data_frame_counts[-1] += 1
+
         raw_data_filename_abs = [os.path.realpath(filename) for filename in raw_data_filename]
 
         raw_data_roi = np.array([[cy-nn//2,cy+nn//2],[cx-n//2,cx+n//2]])        
@@ -587,6 +588,18 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
         if bad_pixels is None:
             bad_pixels = []
 
+    # Check for missing detector frames
+    try:
+        if np.size(raw_data_filename_abs) == 1:
+            with h5py.File(raw_data_filename_abs[0],'r') as hdet:
+                if hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'].size < param.points.shape[1]:
+                    print('Detected missing detector frame(s), correcting scan positions and ic...')
+                    fid = np.array(hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'])
+                    ic = ic[fid]
+                    param.points = param.points[:,fid]
+    except Exception as err:
+        print(err)
+        pass
 
     # create a folder
     try:

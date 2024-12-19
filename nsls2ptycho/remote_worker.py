@@ -84,25 +84,32 @@ class recon_worker:
                     pass
             with open(self.msg_file,'a') as f:
                 f.write(msg+'\n')
+    def cleanup(self):
+        self.close_mmap()
+        if self.fname_full and os.path.exists(self.fname_full):
+            os.remove(self.fname_full)
+            self.fname_full = None
+        if os.path.exists(os.path.join(self.monitor_path,'prb_live.npy')):
+            os.remove(os.path.join(self.monitor_path,'prb_live.npy'))
+        if os.path.exists(os.path.join(self.monitor_path,'obj_live.npy')):
+            os.remove(os.path.join(self.monitor_path,'obj_live.npy'))
 
+        
     def abort_recon(self):
         if self.process:
             self.process.terminate()
             self.process.wait()
             self.process = None
         self.msg_export('[Worker]Recon aborted')
-        if self.fname_full:
-            os.remove(self.fname_full)
-            self.fname_full = None
+        self.cleanup()
 
     def complete_recon(self):
         if self.fname_full:
             self.msg_export('[Worker]Recon done for '+self.fname)
-            os.remove(self.fname_full)
+            self.cleanup()
             # Clear msg file
             with open(self.msg_file,'w') as f:
                 pass
-            self.fname_full = None
 
     def recon(self):
         self.msg_export('[Worker]Start reconstructing '+self.fname)

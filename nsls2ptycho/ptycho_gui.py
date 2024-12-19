@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QFileDialog, QAction
 from .ui import ui_ptycho
 from .core.utils import clean_shared_memory, get_mpi_num_processes, parse_range2
 from .core.ptycho_param import Param
-from .core.ptycho_recon import PtychoReconWorker,PtychoReconRemote, PtychoReconFakeWorker, HardWorker
+from .core.ptycho_recon import PtychoReconWorker,PtychoReconRemote, PtychoReconLive, PtychoReconFakeWorker, HardWorker
 from .core.ptycho_qt_utils import PtychoStream
 from .core.widgets.list_widget import ListWidget
 from .core.widgets.mplcanvas import load_image_pil
@@ -90,6 +90,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.btn_recon_batch_stop.clicked.connect(self.batchStop)
         self.ck_init_prb_batch_flag.stateChanged.connect(self.switchProbeBatch)
         self.ck_init_obj_batch_flag.stateChanged.connect(self.switchObjectBatch)
+
+        self.pb_start_live.clicked.connect(self.start_live)
 
         self.menu_import_config.triggered.connect(self.importConfig)
         self.menu_export_config.triggered.connect(self.exportConfig)
@@ -509,7 +511,89 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         
 
         # batch param group, necessary?
+    def start_live(self):
+        try:
+            self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+            self.recon_bar.setValue(0)
+            self.recon_bar.setMaximum(self.param.n_iterations)
 
+            # at least one GPU needs to be selected
+            if self.param.gpu_flag and len(self.param.gpus) == 0 and self.param.mpi_file_path == '':
+                print("[WARNING] select at least one GPU!", file=sys.stderr)
+                return
+
+
+            # this is needed because MPI processes need to know the working directory...
+            if self.param.gpu_flag and len(self.param.gpus) == 1:
+                self._exportConfigHelper(self._config_path+'%d'%self.param.gpus[0])
+            else:
+                raise NotImplementedError('Live recon on multiple gpus not implemented')
+
+            # init reconStepWindow
+            if self.ck_preview_flag.isChecked():
+                if self.param.mode_flag:
+                    info = (self.param.obj_mode_num, self.param.prb_mode_num, 1)
+                elif self.param.multislice_flag:
+                    info = (self.param.slice_num, 1, 1)
+                else: 
+                    info = (1, 1, 1)
+
+                if self.reconStepWindow is None:
+                    self.reconStepWindow = ReconStepWindow(*info)
+                self.reconStepWindow.reset_window(*info, iterations=self.param.n_iterations,
+                                                    slider_interval=self.param.display_interval)
+                self.reconStepWindow.show()
+            else:
+                if self.reconStepWindow is not None:
+                    # TODO: maybe a thorough cleanup???
+                    self.reconStepWindow.close()
+
+            if not _TEST:
+                thread = self._ptycho_gpu_thread = PtychoReconLive(self.param, parent=self)
+            else:
+                thread = self._ptycho_gpu_thread = PtychoReconFakeWorker(self.param, parent=self)
+
+            thread.update_signal.connect(self.update_recon_step)
+            thread.finished.connect(self.resetButtons)
+
+            #thread.finished.connect(self.reconStepWindow.debug)
+            thread.start()
+
+            self.btn_recon_stop.setEnabled(True)
+            self.btn_recon_start.setEnabled(False)
+
+            # init scan window
+            # TODO: optimize and refactor this part
+            if self.ck_scan_pt_flag.isChecked():
+                if self.scanWindow is None:
+                    self.scanWindow = ScanWindow()
+                    self.scanWindow.reset_window()
+                    self.scanWindow.show()
+            else:
+                if self.scanWindow is not None:
+                    self.scanWindow.close()
+                    self.scanWindow = None
+                return
+
+            if self._scan_points is None:
+                raise RuntimeError("Scan points were not read. This shouldn't happen. Abort.")
+            else:
+                self._scan_points[0] *= -1.*self.param.x_direction
+                self._scan_points[1] *= self.param.y_direction
+                # borrowed from nsls2ptycho/core/ptycho_recon.py
+                if self.param.mpi_file_path == '':
+                    if self.param.gpu_flag:
+                        num_processes = str(len(self.param.gpus))
+                    else:
+                        num_processes = str(self.param.processes) if self.param.processes > 1 else str(1)
+                else:
+                    # regardless if GPU is used or not --- trust users to know this
+                    num_processes = str(get_mpi_num_processes(self.param.mpi_file_path))
+                self.scanWindow.update_image(self._scan_points, int(num_processes))
+        except:
+            traceback.print_exc()
+
+        
 
     def start(self, batch_mode=False):
         if self._ptycho_gpu_thread is not None and self._ptycho_gpu_thread.isFinished():
@@ -730,26 +814,37 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 images.append( np.rot90(np.abs(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
 
                             # load data that has been averaged + orthonormalized + phase-ramp removed
-                            for i in range(self.param.obj_mode_num):
-                                data['obj_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                            +'object_mode_orth_ave_rp_mode_'+str(i)+'.npy'))   
-                                self.reconStepWindow.cb_image_object.addItem("Object "+str(i)+" (orth_ave_rp)")
-                                # hard-wire the padding values here...
-                                images.append( np.rot90(np.angle(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-                                images.append( np.rot90(np.abs(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                            if os.path.exists(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' +'object_mode_orth_ave_rp_mode_'+str(i)+'.npy')):
+                                for i in range(self.param.obj_mode_num):
+                                    data['obj_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                                +'object_mode_orth_ave_rp_mode_'+str(i)+'.npy'))   
+                                    self.reconStepWindow.cb_image_object.addItem("Object "+str(i)+" (orth_ave_rp)")
+                                    # hard-wire the padding values here...
+                                    images.append( np.rot90(np.angle(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                    images.append( np.rot90(np.abs(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                            else:
+                                for i in range(self.param.obj_mode_num):
+                                    images.append( np.rot90(np.angle(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                    images.append( np.rot90(np.abs(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
 
                             data['prb'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
                                                         +'probe.npy'))
                             for i in range(self.param.prb_mode_num):
                                 images.append( np.rot90(np.abs(data['prb'][i])) )
                                 images.append( np.rot90(np.angle(data['prb'][i])) )
-                        
-                            for i in range(self.param.prb_mode_num):
-                                data['prb_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                            +'probe_mode_orth_ave_rp_mode_'+str(i)+'.npy'))
-                                self.reconStepWindow.cb_image_probe.addItem("Probe "+str(i)+" (orth_ave_rp)")
-                                images.append( np.rot90(np.abs(data['prb_'+str(i)])) )
-                                images.append( np.rot90(np.angle(data['prb_'+str(i)])) )# load data that has been averaged + orthonormalized + phase-ramp removed
+
+                            if os.path.exists(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' +'probe_mode_orth_ave_rp_mode_'+str(i)+'.npy')):
+                                for i in range(self.param.prb_mode_num):
+                                    data['prb_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                                +'probe_mode_orth_ave_rp_mode_'+str(i)+'.npy'))
+                                    self.reconStepWindow.cb_image_probe.addItem("Probe "+str(i)+" (orth_ave_rp)")
+                                    images.append( np.rot90(np.abs(data['prb_'+str(i)])) )
+                                    images.append( np.rot90(np.angle(data['prb_'+str(i)])) )# load data that has been averaged + orthonormalized + phase-ramp removed
+                                else:
+                                    for i in range(self.param.prb_mode_num):
+                                        images.append( np.rot90(np.abs(data['prb'][i])) )
+                                        images.append( np.rot90(np.angle(data['prb'][i])) )
+
                             
                             self.reconStepWindow.result_type_num = 2
                         elif self.param.multislice_flag:
@@ -800,7 +895,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 
                         self.reconStepWindow.update_images(it, images)
                     elif (it-1) % self.param.display_interval == 0 and not self.param.remote_srv:
-
+                        # Replace zero with NaN for better visulization
+                        oit = self._obj[it-1]
+                        oit[oit==0] = np.nan
                         if self.param.mode_flag:
                             images = []
                             for i in range(self.param.obj_mode_num):
@@ -833,7 +930,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'prb_live.npy')
                             obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'obj_live.npy')
                             while (time.time()-tnow)<20:
-                                if os.path.getsize(prb_live_file)>0 and os.path.getsize(obj_live_file)>0:
+                                if os.path.exists(prb_live_file) and os.path.getsize(prb_live_file)>0 and os.path.exists(obj_live_file) and os.path.getsize(obj_live_file)>0:
                                 #time.sleep(1) # wait for the npy files in file system
                                     self._prb_live = np.load(prb_live_file)
                                     self._obj_live = np.load(obj_live_file)
