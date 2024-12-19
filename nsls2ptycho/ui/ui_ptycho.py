@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file './ui_ptycho.ui'
+# Form implementation generated from reading ui file 'ui_ptycho.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.7
 #
@@ -983,6 +983,18 @@ class Ui_MainWindow(object):
         self.ck_weak_obj_flag.setObjectName("ck_weak_obj_flag")
         self.horizontalLayout_24.addWidget(self.ck_weak_obj_flag)
         self.tabWidget.addTab(self.tab_4, "")
+        self.tab_5 = QtWidgets.QWidget()
+        self.tab_5.setObjectName("tab_5")
+        self.pb_start_live = QtWidgets.QPushButton(self.tab_5)
+        self.pb_start_live.setGeometry(QtCore.QRect(20, 70, 211, 91))
+        self.pb_start_live.setObjectName("pb_start_live")
+        self.label_69 = QtWidgets.QLabel(self.tab_5)
+        self.label_69.setGeometry(QtCore.QRect(20, 10, 421, 51))
+        font = QtGui.QFont()
+        font.setPointSize(24)
+        self.label_69.setFont(font)
+        self.label_69.setObjectName("label_69")
+        self.tabWidget.addTab(self.tab_5, "")
         self.tab_3 = QtWidgets.QWidget()
         self.tab_3.setObjectName("tab_3")
         self.layoutWidget4 = QtWidgets.QWidget(self.tab_3)
@@ -1329,6 +1341,9 @@ class Ui_MainWindow(object):
         self.ck_ms_pie_flag.setText(_translate("MainWindow", "Use PIE"))
         self.ck_weak_obj_flag.setText(_translate("MainWindow", "weak object"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_4), _translate("MainWindow", "Advanced options 2"))
+        self.pb_start_live.setText(_translate("MainWindow", "StartLive"))
+        self.label_69.setText(_translate("MainWindow", "Work in progress"))
+        self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_5), _translate("MainWindow", "Live recon"))
         self.label_52.setText(_translate("MainWindow", "Scan numbers & ranges"))
         self.le_batch_items.setToolTip(_translate("MainWindow", "Set scan numbers and ranges. Example: 2, 3-5, 7-15, 23, 30-55"))
         self.le_batch_items.setPlaceholderText(_translate("MainWindow", "100000:100010,200001:200010:3"))
