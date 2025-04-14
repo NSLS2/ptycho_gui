@@ -358,7 +358,10 @@ class PtychoReconLive(QtCore.QThread):
                 target_list.append(float(tokens[current+2+j]))
     
         # assuming tokens (stdout line) is split but not yet processed
-        it = int(tokens[2])
+        try:
+            it = int(tokens[2])
+        except:
+            return
         
         # first remove brackets
         empty_index_list = []
@@ -413,7 +416,7 @@ class PtychoReconLive(QtCore.QThread):
         parent_module = '.'.join(self.__module__.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
         # "1" is just a placeholder to be overwritten soon
         if param.gpu_flag and len(param.gpus) == 1:
-            mpirun_command = ["mpirun","-n","1","/nsls2/data/hxn/legacy/shared/conda_envs/ptycho_production/bin/python3.9", "-W", "ignore", "-m",parent_module+".ptycho.recon_ptycho_live",self.config_file]
+            mpirun_command = ["python", "-W", "ignore", "-m",parent_module+".Holoptycho",self.config_file]
         else:
             raise NotImplementedError('Live recon on multiple gpus not implemented')
         
@@ -421,6 +424,8 @@ class PtychoReconLive(QtCore.QThread):
 
         # for CuPy v8.0+
         os.environ['CUPY_ACCELERATORS'] = 'cub'
+
+        print(mpirun_command)
                 
         try:
             self.return_value = None
@@ -442,6 +447,8 @@ class PtychoReconLive(QtCore.QThread):
                 # If this is a concern, using the asyncio module could be a safer approach?
                 # One could also process stdout in one loop and then stderr in another, which
                 # will not have the blocking issue.
+                flags = fcntl(run_ptycho.stdout, F_GETFL) # first get current stderr flags
+                fcntl(run_ptycho.stdout, F_SETFL, flags | O_NONBLOCK)
                 flags = fcntl(run_ptycho.stderr, F_GETFL) # first get current stderr flags
                 fcntl(run_ptycho.stderr, F_SETFL, flags | O_NONBLOCK)
 
@@ -476,6 +483,10 @@ class PtychoReconLive(QtCore.QThread):
                             update_fcn(it+1, result)
                         elif len(stdout) == 3 and stdout[0] == "shared" and update_fcn is not None:
                             update_fcn(-1, "init_mmap")
+                        elif len(stdout) == 3 and stdout[0] == "flush" and update_fcn is not None:
+                            update_fcn(-1, "flush")
+                        elif len(stdout) == 3 and stdout[0] == "reload" and update_fcn is not None:
+                            update_fcn(-1, "reload")
 
                     if stderr:
                         stderr = stderr.decode('utf-8')

@@ -29,6 +29,18 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
 
         self.reset_window(obj_num, prb_num, result_type_num)
 
+    def reset_figs(self):
+        self.canvas_object_amp.reset()
+        self.canvas_object_pha.reset()
+        self.canvas_probe_amp.reset()
+        self.canvas_probe_pha.reset()
+        self.canvas_probe_fft.reset()
+        self.canvas_probe_comp.reset()
+        self.canvas_object_chi.reset()
+        self.canvas_object_chi.axis_on()
+        self.canvas_probe_chi.reset()
+        self.canvas_probe_chi.axis_on()
+
     def reset_window(self, obj_num=1, prb_num=1, result_type_num=1, iterations=50, slider_interval=1):
         """Called from outside"""
         self.image_buffer = {}
@@ -196,8 +208,6 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                 self.canvas_probe_fft.update_image(probe_fft)
             
             self.it_ondisplay = it
-
-            
 
             
 

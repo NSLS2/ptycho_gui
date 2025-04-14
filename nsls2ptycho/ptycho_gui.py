@@ -92,6 +92,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.ck_init_obj_batch_flag.stateChanged.connect(self.switchObjectBatch)
 
         self.pb_start_live.clicked.connect(self.start_live)
+        self.pb_stop_live.clicked.connect(self.stop_live)
 
         self.menu_import_config.triggered.connect(self.importConfig)
         self.menu_export_config.triggered.connect(self.exportConfig)
@@ -508,6 +509,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.le_batch_badpixel.setText(p.batch_badpixel_file)
 
         self.ck_save_diff.setChecked(p.save_diff)
+        self.reset_at_next = False
         
 
         # batch param group, necessary?
@@ -592,6 +594,12 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 self.scanWindow.update_image(self._scan_points, int(num_processes))
         except:
             traceback.print_exc()
+            
+    def stop_live(self):
+        if self._ptycho_gpu_thread is not None:
+            self._ptycho_gpu_thread.kill() # first kill the mpi processes
+            self._ptycho_gpu_thread.quit() # then quit QThread gracefully
+            self._ptycho_gpu_thread = None
 
         
 
@@ -723,6 +731,28 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             if self.scanWindow is not None:
                 self.scanWindow.reset_window()
 
+    def reload_mmap(self):
+        p = self.param
+        datasize = 8 if p.precision == 'single' else 16
+        datatype = np.complex64 if p.precision == 'single' else np.complex128
+
+        global mm_list, shm_list
+        for i, shm in enumerate(shm_list):
+            mm_list[i] = mmap.mmap(shm.fd, shm.size)
+            
+        nx_obj = int.from_bytes(mm_list[0].read(8), byteorder='big')
+        ny_obj = int.from_bytes(mm_list[0].read(8), byteorder='big') # the file position has been moved by 8 bytes when we get nx_obj
+
+        if p.mode_flag:
+            self._prb = np.ndarray(shape=(p.n_iterations, p.prb_mode_num, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
+            self._obj = np.ndarray(shape=(p.n_iterations, p.obj_mode_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
+        elif p.multislice_flag:
+            self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
+            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
+        else:
+            self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
+            self._obj = np.ndarray(shape=(p.n_iterations, 1, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
+
 
     def init_mmap(self):
         p = self.param
@@ -737,6 +767,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         nx_obj = int.from_bytes(mm_list[0].read(8), byteorder='big')
         ny_obj = int.from_bytes(mm_list[0].read(8), byteorder='big') # the file position has been moved by 8 bytes when we get nx_obj
 
+    
         if p.mode_flag:
             self._prb = np.ndarray(shape=(p.n_iterations, p.prb_mode_num, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
             self._obj = np.ndarray(shape=(p.n_iterations, p.obj_mode_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
@@ -776,6 +807,11 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         self.recon_bar.setValue(it)
 
+        if data == 'flush':
+            self.reconStepWindow.image_buffer = {}
+            self.reconStepWindow.current_max_iters = 1
+            self.reset_at_next = True
+
         if self.reconStepWindow is not None:
             self.reconStepWindow.update_iter(it)
 
@@ -785,6 +821,13 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         try:
                             # the two npy are created by ptycho by this time
                             self.init_mmap()
+                        except ExistentialError:
+                            # user may kill the process prematurely
+                            self.stop()
+                    if it == -1 and data == 'reload':
+                        try:
+                            # the two npy are created by ptycho by this time
+                            self.reload_mmap()
                         except ExistentialError:
                             # user may kill the process prematurely
                             self.stop()
@@ -895,9 +938,13 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 
                         self.reconStepWindow.update_images(it, images)
                     elif (it-1) % self.param.display_interval == 0 and not self.param.remote_srv:
+
+                        if self.reset_at_next:
+                            self.reconStepWindow.reset_figs()
+                            self.reset_at_next = False    
                         # Replace zero with NaN for better visulization
                         oit = self._obj[it-1]
-                        oit[oit==0] = np.nan
+                        oit[np.angle(oit)==0.1] = np.nan
                         if self.param.mode_flag:
                             images = []
                             for i in range(self.param.obj_mode_num):
@@ -929,7 +976,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             tnow = time.time()
                             prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'prb_live.npy')
                             obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'obj_live.npy')
-                            while (time.time()-tnow)<20:
+                            while (time.time()-tnow)<500:
                                 if os.path.exists(prb_live_file) and os.path.getsize(prb_live_file)>0 and os.path.exists(obj_live_file) and os.path.getsize(obj_live_file)>0:
                                 #time.sleep(1) # wait for the npy files in file system
                                     self._prb_live = np.load(prb_live_file)

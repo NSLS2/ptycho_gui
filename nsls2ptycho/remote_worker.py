@@ -66,14 +66,14 @@ class recon_worker:
                 shm.unlink()
             self.mm_list = []
             self.shm_list = []
-        except NameError:
+        except:
             # either not using GUI, monitor is turned off, global variables are deleted or not yet created!
             # need to examine the last case
             try:
                 SharedMemory("/"+self.p.shm_name+"_obj_size").unlink()
                 SharedMemory("/"+self.p.shm_name+"_prb").unlink()
                 SharedMemory("/"+self.p.shm_name+"_obj").unlink()
-            except ExistentialError:
+            except:
                 pass # nothing to clean up, we're done
 
     def msg_export(self,msg):

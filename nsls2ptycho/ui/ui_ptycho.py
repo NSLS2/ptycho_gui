@@ -994,6 +994,9 @@ class Ui_MainWindow(object):
         font.setPointSize(24)
         self.label_69.setFont(font)
         self.label_69.setObjectName("label_69")
+        self.pb_stop_live = QtWidgets.QPushButton(self.tab_5)
+        self.pb_stop_live.setGeometry(QtCore.QRect(240, 70, 211, 91))
+        self.pb_stop_live.setObjectName("pb_stop_live")
         self.tabWidget.addTab(self.tab_5, "")
         self.tab_3 = QtWidgets.QWidget()
         self.tab_3.setObjectName("tab_3")
@@ -1183,7 +1186,7 @@ class Ui_MainWindow(object):
         self.menuBar.addAction(self.menuOptions.menuAction())
 
         self.retranslateUi(MainWindow)
-        self.tabWidget.setCurrentIndex(0)
+        self.tabWidget.setCurrentIndex(3)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
     def retranslateUi(self, MainWindow):
@@ -1343,6 +1346,7 @@ class Ui_MainWindow(object):
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_4), _translate("MainWindow", "Advanced options 2"))
         self.pb_start_live.setText(_translate("MainWindow", "StartLive"))
         self.label_69.setText(_translate("MainWindow", "Work in progress"))
+        self.pb_stop_live.setText(_translate("MainWindow", "StopLive"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab_5), _translate("MainWindow", "Live recon"))
         self.label_52.setText(_translate("MainWindow", "Scan numbers & ranges"))
         self.le_batch_items.setToolTip(_translate("MainWindow", "Set scan numbers and ranges. Example: 2, 3-5, 7-15, 23, 30-55"))

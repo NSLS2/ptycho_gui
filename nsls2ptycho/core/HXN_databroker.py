@@ -187,7 +187,7 @@ def load_metadata(db, scan_num:int, det_name:str):
             # get ccd_pixel_um
             ccd_pixel_um = 55.
 
-            z_m = 0.5
+            z_m = 1.467
         elif 'eiger1' in header.start['detectors']:
             ccd_pixel_um = 75.
 
@@ -211,8 +211,8 @@ def load_metadata(db, scan_num:int, det_name:str):
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
             if header.start['plan_name'].startswith('pt'):
-                items = [det_name, 'sclr3_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
-                ic_chan = 'sclr3_ch4'
+                items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                ic_chan = 'sclr1_ch3'
             else:
                 items = [det_name, 'sclr1_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                 ic_chan = 'sclr1_ch4'
@@ -668,8 +668,12 @@ def get_single_image(db, frame_num, mds_table):
         for i in range(1,length):
             img_raw[i] = db.reg.retrieve(mds_table.iat[i])[0]
     else:
+        print(frame_num)
         img_raw = db.reg.retrieve(mds_table.iat[frame_num])
-    overflow_value = np.iinfo(img_raw.dtype).max
+    try:
+        overflow_value = np.iinfo(img_raw.dtype).max
+    except:
+        overflow_value = 1e10
     img = np.mean(img_raw,axis=0)
     return img,overflow_value
 

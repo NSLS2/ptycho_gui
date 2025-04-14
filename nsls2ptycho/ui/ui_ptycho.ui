@@ -490,7 +490,7 @@
        <string notr="true"/>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>3</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -2374,6 +2374,19 @@
         </property>
         <property name="text">
          <string>Work in progress</string>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pb_stop_live">
+        <property name="geometry">
+         <rect>
+          <x>240</x>
+          <y>70</y>
+          <width>211</width>
+          <height>91</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>StopLive</string>
         </property>
        </widget>
       </widget>
