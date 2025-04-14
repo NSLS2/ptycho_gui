@@ -7,6 +7,6 @@ __pycache__
 .idea
 .vscode
 
-nsls2ptycho/core/ptycho
+nsls2ptycho/core/ptycho/
 build/
 nsls2ptycho.egg-info/
