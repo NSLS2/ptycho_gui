@@ -2,9 +2,11 @@ __pycache__
 *.cubin
 *.nvprof
 *.pyc
+*.npy
 
 .idea
 .vscode
 
+nsls2ptycho/core/ptycho
 build/
 nsls2ptycho.egg-info/
