@@ -1,0 +1,15 @@
+1. Login to a computation node that 1) has access to the /nsls2/data/ file system and 2) have CUDA compatible GPU cards for the recon task.
+2. Switch to the ptycho/ directory which has the scan_XXXXXX.h5 header files.
+3. Do 'python -m nsls2ptycho.remote_worker' and it will start monitoring the communication path like 'remote_<srvname>'
+4. Create the task config file inside the monitored communication path 'remote_<srvname>/', either from GUI or from copying a previous config file.
+5. The remote worker should grab the config file and start running the reconstruction.
+6. If started from GUI, the intermediate results and reconstruction messages should be sent back to GUI through temporary files inside remote_<srvname>/
+
+
+# On NSLS2 servers, use the following directory for testing:
+
+Switch to ptycho folder (or your own test folder, just create a 'remote_<srvname>' path inside it:
+/nsls2/data2/hxn/legacy/users/2025Q1/RASMI_2025Q1/ptycho
+
+Copy the config file:
+cp /nsls2/data2/hxn/legacy/users/2025Q1/RASMI_2025Q1/remote_ptycho_dev/ptycho_339822_test_recon /nsls2/data2/hxn/legacy/users/2025Q1/RASMI_2025Q1/ptycho/remote_<mars2>/
