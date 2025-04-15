@@ -8,8 +8,12 @@
 
 # On NSLS2 servers, use the following directory for testing:
 
-Switch to ptycho folder (or your own test folder, just create a 'remote_<srvname>' path inside it:
-/nsls2/data2/hxn/legacy/users/2025Q1/RASMI_2025Q1/ptycho
+Create your own test folder and create a 'remote_<srvname>' path inside it:
+<test_folder>/remote_<>/
 
-Copy the config file:
-cp /nsls2/data2/hxn/legacy/users/2025Q1/RASMI_2025Q1/remote_ptycho_dev/ptycho_339822_test_recon /nsls2/data2/hxn/legacy/users/2025Q1/RASMI_2025Q1/ptycho/remote_<mars2>/
+On the computation node, start the ptycho remote worker with proper dependencies by:
+export PATH=/nsls2/data/hxn/shared/config/bluesky/profile_analysis/scripts/:/nsls2/data/hxn/legacy/shared/conda_envs/ptycho_production/bin/:$PATH;/nsls2/data/hxn/legacy/shared/conda_envs/ptycho_production/bin/python3.9 -m nsls2ptycho.remote_worker
+(Make sure it's loading your local nsls2ptycho package instead of the version in /nsls2/data/hxn/legacy/shared/conda_envs/ptycho_production/lib/python3.9/site-packages)
+
+On any node, Copy the config file to the 'remote_<srvname>' in your test folder:
+cp /nsls2/data2/hxn/legacy/users/2025Q1/RASMI_2025Q1/remote_ptycho_dev/ptycho_339822_test_recon <test_folder>/remote_<>/
