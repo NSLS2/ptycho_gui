@@ -184,14 +184,14 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             object_image_amp = self._fetch_images(it, images_to_show, 'obj_amp')
             probe_image_amp = self._fetch_images(it, images_to_show, 'prb_amp')
             if object_image_amp is not None:
-                self.canvas_object_amp.update_image(object_image_amp)
+                self.canvas_object_amp.update_image(object_image_amp) #,[0.75,1])
             if probe_image_amp is not None:
                 self.canvas_probe_amp.update_image(probe_image_amp)
 
             object_image_pha = self._fetch_images(it, images_to_show, 'obj_pha')
             probe_image_pha = self._fetch_images(it, images_to_show, 'prb_pha')
             if object_image_pha is not None:
-                self.canvas_object_pha.update_image(object_image_pha)
+                self.canvas_object_pha.update_image(object_image_pha) #,[-0.1,0.2])
             if probe_image_pha is not None:
                 self.canvas_probe_pha.update_image(probe_image_pha)
 

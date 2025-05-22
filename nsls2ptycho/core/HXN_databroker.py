@@ -211,8 +211,19 @@ def load_metadata(db, scan_num:int, det_name:str):
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
             if header.start['plan_name'].startswith('pt'):
-                items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
-                ic_chan = 'sclr1_ch3'
+                if 'sclr1' in scan_doc['detectors']:
+                    # Sclr1 used
+                    items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = 'sclr1_ch3'
+                elif 'sclr3' in scan_doc['detectors']:  
+                    # Sclr3 used              
+                    items = [det_name, 'sclr3_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = 'sclr3_ch4'
+                else:
+                    # Ignore scaler
+                    items = [det_name, 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = None
+
             else:
                 items = [det_name, 'sclr1_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                 ic_chan = 'sclr1_ch4'
@@ -303,8 +314,9 @@ def load_metadata(db, scan_num:int, det_name:str):
                         angle = 0
                 except:
                     angle = 0
-            ic = np.zeros(num_frame)
-            ic[:] = np.resize(db.reg.retrieve(df[ic_chan].iat[0]),num_frame)
+            ic = np.ones(num_frame)
+            if ic_chan:
+                ic[:] = np.resize(db.reg.retrieve(df[ic_chan].iat[0]),num_frame)
             array_ensure_positive_elements(ic, name="scaler")
 
             # get ccd_pixel_um

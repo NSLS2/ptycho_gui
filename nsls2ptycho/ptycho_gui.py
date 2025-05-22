@@ -64,8 +64,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.btn_set_extra_scans.clicked.connect(self.setExtraScans)
         self.btn_batch_badpixel.clicked.connect(self.loadBatchBadpixel)
 
-        #self.le_scan_num.editingFinished.connect(self.forceLoad) # too sensitive, why?
-        self.le_scan_num.textChanged.connect(self.forceLoad)
+        self.sp_scan_num.valueChanged.connect(self.forceLoad)
         self.cb_dataloader.currentTextChanged.connect(self.forceLoad)
         self.cb_detectorkind.currentTextChanged.connect(self.forceLoad)
 
@@ -235,7 +234,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p = self.param
 
         # data group
-        p.scan_num = str(self.le_scan_num.text())
+        p.scan_num = str(self.sp_scan_num.value())
         p.detectorkind = str(self.cb_detectorkind.currentText())
         p.frame_num = int(self.sp_fram_num.value())
         # p.working_directory set by setWorkingDirectory()
@@ -379,7 +378,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p = self.param
 
         # Data group
-        self.le_scan_num.setText(p.scan_num)
+        self.sp_scan_num.setValue(p.scan_num)
         self.le_working_directory.setText(str(p.working_directory or ''))
         self.cb_detectorkind.setCurrentIndex(p.get_detector_kind_index())
         self.sp_fram_num.setValue(int(p.frame_num))
@@ -609,8 +608,21 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         if self._ptycho_gpu_thread is None:
             if not self._loaded:
-                print("[WARNING] Remember to click \"Load\" before proceeding!", file=sys.stderr) 
-                return
+                if self.cb_dataloader.currentText() == "Load from databroker":
+                    print('Loading scan from databroker and cropping with current ROI...')
+                    self.crop_scan()
+                    self._worker_thread.finished.connect(self.start)
+                    return
+
+                if self.cb_dataloader.currentText() == "Load from h5":
+                    try:
+                        self._loadExpParamH5(str(self.sp_scan_num.value()))
+                    except OSError: # no h5 file?
+                        print("[Warning] h5 not found... Will try to load scan from databroker first.", file=sys.stderr)
+                        self.crop_scan()
+                        self.cb_dataloader.setCurrentIndex(0)
+                        self._worker_thread.finished.connect(self.start)
+                        return
 
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
             self.recon_bar.setValue(0)
@@ -1262,7 +1274,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
             # fire up
             try:
-                self.le_scan_num.textChanged.disconnect(self.forceLoad)
+                self.sp_scan_num.valueChanged.disconnect(self.forceLoad)
             except:
                 pass
             if self.ck_init_prb_batch_flag.isChecked():
@@ -1271,7 +1283,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             if self.ck_init_obj_batch_flag.isChecked():
                 filename = self.le_obj_path_batch.text()
                 self._batch_obj_filename = filename.split("*")
-            self._batch_badpixel_file = self.le_batch_badpixel.text()
             self._batch_manager() # serve as linked list's head
         except Exception as ex:
             self.exception_handler(ex)
@@ -1282,7 +1293,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         Brute-force abortion of the entire batch. No resumption is possible.
         '''
         self._scan_numbers = None
-        self.le_scan_num.textChanged.connect(self.forceLoad)
+        self.sp_scan_num.valueChanged.connect(self.forceLoad)
         self.stop(True)
         if self.roiWindow is not None:
             if self.roiWindow._worker_thread is not None:
@@ -1342,7 +1353,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             QtWidgets.QApplication.processEvents()
 
                 print("[BATCH] begin processing scan " + str(scan_num) + "...")
-                self.le_scan_num.setText(str(scan_num))
+                self.sp_scan_num.setValue(scan_num)
                 self.btn_recon_batch_start.setEnabled(False)
                 self.btn_recon_batch_stop.setEnabled(True)
 
@@ -1357,7 +1368,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         elif len(self._scan_numbers) > 0:
             scan_num = self._scan_numbers.pop()
             print("[BATCH] begin processing scan " + str(scan_num) + "...")
-            self.le_scan_num.setText(str(scan_num))
+            self.sp_scan_num.setValue(scan_num)
             self.btn_recon_batch_start.setEnabled(False)
             self.btn_recon_batch_stop.setEnabled(True)
 
@@ -1370,29 +1381,38 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         else:
             print("[BATCH] batch processing complete!")
             self._scan_numbers = None
-            self.le_scan_num.textChanged.connect(self.forceLoad)
+            self.sp_scan_num.valueChanged.connect(self.forceLoad)
             self.resetButtons()
             if self.roiWindow is not None:
                 self.roiWindow = None
 
     def _batch_crop(self):
-        # ugly hack: pretend the ROI window exists, take the first frame for finding bad pixels,
-        # mimic human input, and run the reconstruction (if checked)
+        
+        self.crop_scan()
 
-        # first get params from databroker
-
+        if not self.ck_batch_run_flag.isChecked():
+            self._worker_thread.finished.connect(self._batch_manager)
+        else:
+            self._worker_thread.finished.connect(self._batch_run)
+    
+    def crop_scan(self):
+        # Crop scan using current parameters and bad pixel file without opening the ROI window
+        
+        # get exp params from databroker
         self.cb_dataloader.setCurrentIndex(1)
 
         eventloop = QtCore.QEventLoop()
         self._mainwindow_signal.connect(eventloop.quit)
         self.loadExpParam()
         eventloop.exec()
+        
 
         if self.roiWindow is not None:
             self.roiWindow.close()
         
         #print("ROI:", self.roiWindow.canvas.get_red_roi())
         badpixels = None
+        self._batch_badpixel_file = self.le_batch_badpixel.text()
         if self._batch_badpixel_file is not None and len(self._batch_badpixel_file) > 0:
             badpixels = []
             with open(self._batch_badpixel_file, 'r') as f:
@@ -1407,11 +1427,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         cx = self.sp_batch_x0.value() + roi_width // 2
         cy = self.sp_batch_y0.value() + roi_height // 2
         self.save_to_h5(roi_width,roi_height,cx,cy,0,badpixels,None,self.sp_batch_upsample.value(),self.ck_save_diff.isChecked())
-        #self.btn_recon_batch_stop.clicked.connect(self.roiWindow._worker_thread.terminate)
-        if not self.ck_batch_run_flag.isChecked():
-            self._worker_thread.finished.connect(self._batch_manager)
-        else:
-            self._worker_thread.finished.connect(self._batch_run)
+        return
+
     
     def save_to_h5(self,roi_width,roi_height,cx,cy,threshold,badpixels,blue_rois,upsample,save_diff):
         # need an up-to-date param
@@ -1519,7 +1536,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             return get_single_image(self._db, frame_num, self._mds_table)
         else:
             #CSX beamline
-            scan_num = int(self.le_scan_num.text())
+            scan_num = self.sp_scan_num.value()
             items = []
             if self._extra_scans_dialog is not None:
                 list_widget = self._extra_scans_dialog.listWidget
@@ -1542,7 +1559,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def _viewDataFrameH5(self, frame_num:int):
         # load the data from the h5 in the working directory
         working_dir = str(self.le_working_directory.text()) # self.param.working_directory
-        scan_num = str(self.le_scan_num.text())
+        scan_num = str(self.sp_scan_num.value())
         length = self.sp_num_points.value()
         if frame_num >= length:
             message = "[ERROR] The {0}-th frame doesn't exist. "
@@ -1579,16 +1596,16 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
 
     def loadExpParam(self):
-        scan_num = self.le_scan_num.text()
+        scan_num = self.sp_scan_num.value()
 
         try:
             if self.cb_dataloader.currentText() == "Load from databroker":
-                self._loadExpParamBroker(int(scan_num))
+                self._loadExpParamBroker(scan_num)
 
             if self.cb_dataloader.currentText() == "Load from h5":
-                self._loadExpParamH5(scan_num)
+                self._loadExpParamH5(str(scan_num))
         except OSError: # for h5
-            print("[ERROR] h5 not found. Resetting...", file=sys.stderr, end='')
+            print("[ERROR] h5 not found. Resetting...", file=sys.stderr)
             self.resetExperimentalParameters()
         except Exception as ex: # everything unexpected at this time...
             self.exception_handler(ex)
@@ -1697,6 +1714,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 roi = np.array(f['raw_data/roi'])
                 nx = roi[0,1] - roi[0,0]
                 ny = roi[1,1] - roi[1,0]
+                self.sp_batch_x0.setValue(roi[0,0])
+                self.sp_batch_y0.setValue(roi[1,0])
+                self.sp_batch_width.setValue(nx)
+                self.sp_batch_height.setValue(ny)
             self.sp_x_arr_size.setValue(nx)
             self.sp_y_arr_size.setValue(ny)
             self.sp_num_points.setValue(nz)

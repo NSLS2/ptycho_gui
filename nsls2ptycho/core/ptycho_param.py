@@ -33,7 +33,7 @@ class Param(object):
         # organized by grouping in GUI
 
         ### [Data] ###
-        self.scan_num = '34784'       # scan number
+        self.scan_num = 0       # scan number
         self.working_directory = get_working_directory()
         self.detectorkind = ''        # used to be chosen from ['merlin1', 'merlin2', 'timepix1', 'timepix2']
         self.frame_num = 0            # frame number to check

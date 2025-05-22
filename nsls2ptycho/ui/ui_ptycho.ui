@@ -40,21 +40,24 @@
              </widget>
             </item>
             <item>
-             <widget class="QLineEdit" name="le_scan_num">
+             <widget class="QSpinBox" name="sp_scan_num">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                 <horstretch>0</horstretch>
                 <verstretch>0</verstretch>
                </sizepolicy>
               </property>
-              <property name="maximumSize">
+              <property name="minimumSize">
                <size>
                 <width>80</width>
-                <height>16777215</height>
+                <height>0</height>
                </size>
               </property>
-              <property name="text">
-               <string>34784</string>
+              <property name="minimum">
+               <number>-9999999</number>
+              </property>
+              <property name="maximum">
+               <number>9999999</number>
               </property>
              </widget>
             </item>
@@ -490,7 +493,7 @@
        <string notr="true"/>
       </property>
       <property name="currentIndex">
-       <number>3</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
@@ -2578,6 +2581,9 @@
            </property>
            <property name="text">
             <string>Crop data:</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
            </property>
           </widget>
          </item>
