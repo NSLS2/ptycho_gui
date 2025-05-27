@@ -265,6 +265,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p.init_obj_flag = self.ck_init_obj_flag.isChecked()
         # prb and obj path already set 
 
+        p.nearfield_ptycho = self.ck_nearfield_ptycho.isChecked()
+        p.nearfield_defocus_um = self.sp_nearfield_defocus.value()
+
         p.recon_subset_flag = self.ck_recon_subset_flag.isChecked()
         p.recon_subset = str(self.le_recon_subset.text())
 
