@@ -1,5 +1,5 @@
 from databroker.v0 import Broker
-from . import CompositeBroker
+# from . import CompositeBroker
 from databroker.headersource.mongo import MDS
 import numpy as np
 import sys, os, warnings, pandas
@@ -14,10 +14,12 @@ except ModuleNotFoundError:
 from .scan_info import ScanInfo
 try:
     # new mongo database
-    hxn_db = CompositeBroker.db
+    # hxn_db = CompositeBroker.db
     #register(hxn_db)
-except FileNotFoundError:
-    print("hxn.yml not found. Unable to access HXN's database.", file=sys.stderr)
+    from hxntools.CompositeBroker import db
+    hxn_db = db
+except:
+    print("Unable to access HXN's database, loading from pre-saved h5 files only.", file=sys.stderr)
     hxn_db = None
 
 
@@ -180,7 +182,10 @@ def load_metadata(db, scan_num:int, det_name:str):
             ic = np.asfarray(df['sclr1_ch4'])
         else:
             angle = bl.dsth[1]
-            ic = np.asfarray(df['sclr1_ch4'])
+            try:
+                ic = np.asfarray(df['sclr1_ch4'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
         array_ensure_positive_elements(ic, name="scaler")
 
         if 'merlin2' in header.start['detectors']:
