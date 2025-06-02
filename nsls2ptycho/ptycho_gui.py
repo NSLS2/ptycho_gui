@@ -121,6 +121,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self._mds_table = None      # hold a Pandas.dataframe instance
         self._loaded = False        # whether the user has loaded metadata or not (from either databroker or h5)
         self._scan_numbers = None   # a list of scan numbers for batch mode
+        self._prop_dists = None
         self._scan_points = None    # an array of shape (2, N) holding the scan coordinates
         self._extra_scans_dialog = None
         self._batch_prb_filename = None  # probe's filename template for batch mode
@@ -1322,6 +1323,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             try:
                 if not self.ck_batch_track.isChecked():
                     scan_numbers = []
+                    prop_dists = []
                     work_dir = str(self.le_working_directory.text())
                     suffix = str(self.le_sign.text())
                     with open(self._track_file,'r') as file:
@@ -1331,10 +1333,19 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 snum = int(l.split()[0])
                                 if not os.path.exists(work_dir+'./recon_result/S'+str(snum)+'/'+suffix):
                                     scan_numbers.append(snum)
+                                    if len(l.split()) > 2:
+                                        prop = float(l.split()[2])
+                                        prop_dists.append(prop)
                             except:
                                 pass
                     self._scan_numbers = scan_numbers
+                    if prop_dists:
+                        self._prop_dists = prop_dists
                     scan_num = self._scan_numbers.pop()
+                    if self._prop_dists:
+                        prop_dist = self._prop_dists.pop()
+                    else:
+                        prop_dist = None
                 else:
                     scan_num = None
                     work_dir = str(self.le_working_directory.text())
@@ -1357,6 +1368,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
                 print("[BATCH] begin processing scan " + str(scan_num) + "...")
                 self.sp_scan_num.setValue(scan_num)
+                if prop_dist:
+                    self.sp_distance.setValue(prop_dist)
                 self.btn_recon_batch_start.setEnabled(False)
                 self.btn_recon_batch_stop.setEnabled(True)
 
@@ -1370,8 +1383,14 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 time.sleep(5)
         elif len(self._scan_numbers) > 0:
             scan_num = self._scan_numbers.pop()
+            if self._prop_dists:
+                prop_dist = self._prop_dists.pop()
+            else:
+                prop_dist = None
             print("[BATCH] begin processing scan " + str(scan_num) + "...")
             self.sp_scan_num.setValue(scan_num)
+            if prop_dist:
+                self.sp_distance.setValue(prop_dist)
             self.btn_recon_batch_start.setEnabled(False)
             self.btn_recon_batch_stop.setEnabled(True)
 
@@ -1555,7 +1574,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                     frame_all[i] = get_single_image(self._db, frame_num, scan_num, *items)
                 return np.mean(frame_all,axis=0),None
             else:
-                return get_single_image(self._db, frame_num, scan_num, *items),None
+                try:
+                    return get_single_image(self._db, frame_num, scan_num, *items),None
+                except Exception as err:
+                    print(err)
 
 
     #@profile
