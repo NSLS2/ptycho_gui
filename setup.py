@@ -1,9 +1,9 @@
 # ---------------- package metadata ----------------
 NAME = 'nsls2ptycho'
 DESCRIPTION = 'NSLS-II Ptychography Software'
-AUTHOR = 'Leo Fang, Sungsoo Ha, Zhihua Dong, and Xiaojing Huang'
-EMAIL = 'leofang@bnl.gov'
-LINK = 'https://github.com/leofang/ptycho_gui/'
+AUTHOR = 'Leo Fang, Zirui Gao, Sungsoo Ha, Zhihua Dong, and Xiaojing Huang'
+EMAIL = 'xjhuang@bnl.gov'
+LINK = 'https://github.com/NSLS2/ptycho_gui'
 LICENSE = 'MIT'
 REQUIREMENTS = ['mpi4py', 'pyfftw', 'numpy', 'scipy', 'matplotlib', 'Pillow', 'h5py', 'posix_ipc']
 # --------------------------------------------------

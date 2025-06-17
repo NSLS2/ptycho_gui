@@ -158,7 +158,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.updateCorrFlg()
         self.updateRefineDataFlg()
         self.updateBatchCropDataFlg()
-        self.checkGpuAvail()
+        # self.checkGpuAvail()
         self.updateGpuFlg()
         self.resetExperimentalParameters() # probably not necessary
         self.setLoadButton()

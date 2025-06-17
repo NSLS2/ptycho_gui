@@ -55,6 +55,11 @@ try:
         with open(config_path, 'r') as f:
             beamline_config = json.load(f)
             beamline_name = beamline_config['beamline_name']
+    elif 'BEAMLINE_ACRONYM' in os.environ:
+        if os.environ['BEAMLINE_ACRONYM'] == 'HXN':
+            beamline_name = 'HXN'
+        elif os.environ['BEAMLINE_ACRONYM'] == 'CSX':
+            beamline_name = 'CSX'
     else:
         beamline_name = None
 
