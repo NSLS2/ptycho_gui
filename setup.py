@@ -80,7 +80,7 @@ setup(name=NAME,
       packages=["nsls2ptycho", "nsls2ptycho.core", "nsls2ptycho.ui", "nsls2ptycho.core.ptycho", "nsls2ptycho.core.widgets"],
       entry_points={
           'gui_scripts': ['run-ptycho = nsls2ptycho.ptycho_gui:main'],
-          'console_scripts': ['run-ptycho-backend = nsls2ptycho.core.ptycho.recon_ptycho_gui:main']
+          'console_scripts': ['run-ptycho-backend = nsls2ptycho.core.ptycho.recon_ptycho_gui:main','run-ptycho-worker = nsls2ptycho.remote_worker:main']
       },
       install_requires=REQUIREMENTS,
       #extras_require={'GPU': 'cupy'}, # this will build cupy from source, may not be the best practice!

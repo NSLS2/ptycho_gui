@@ -222,8 +222,10 @@ class recon_worker:
                         print(__loader__.name)
                         self.msg_export('[Warning]Another session of ptycho worker is running on this server or the previous worker didn\'t exit normally')
             time.sleep(3)
-
-if __name__ == '__main__':
+def main():
     r = recon_worker('.')
     signal.signal(signal.SIGINT,r.exit)
     r.monitor()
+
+if __name__ == '__main__':
+    main()
