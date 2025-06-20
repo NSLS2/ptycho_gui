@@ -611,7 +611,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self._ptycho_gpu_thread = None
 
         if self._ptycho_gpu_thread is None:
-            if not self._loaded:
+            working_directory = str(self.le_working_directory.text())
+            h5_filename = working_directory + '/scan_' + str(self.sp_scan_num.value()) + '.h5'
+            #if not self._loaded:
+            if not self._loaded or not os.path.exists(h5_filename):
                 if self.cb_dataloader.currentText() == "Load from databroker":
                     print('Loading scan from databroker and cropping with current ROI...')
                     self.crop_scan()
@@ -840,7 +843,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         except ExistentialError:
                             # user may kill the process prematurely
                             self.stop()
-                    if it == -1 and data == 'reload':
+                    elif it == -1 and data == 'reload':
                         try:
                             # the two npy are created by ptycho by this time
                             self.reload_mmap()
