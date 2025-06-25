@@ -1546,7 +1546,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         else:
             if self.roiWindow is None:
                 self.roiWindow = RoiWindow(image=img, main_window=self, overflow_value = overflow_value)
-            #else:
+            else:
+                self.roiWindow.set_image(image=img,main_window=self)
             #    self.roiWindow.reset_window(image=img, main_window=self)
             ##self.roiWindow.roi_changed.connect(self._get_roi_slot)
             self.roiWindow.show()
@@ -1749,16 +1750,39 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self.sp_x_arr_size.setValue(nx)
             self.sp_y_arr_size.setValue(ny)
             self.sp_num_points.setValue(nz)
-            self.sp_x_step_size.setValue(f['dr_x'][()])
-            self.sp_y_step_size.setValue(f['dr_y'][()])
-            self.sp_x_scan_range.setValue(f['x_range'][()])
-            self.sp_y_scan_range.setValue(f['y_range'][()])
+
+            points = np.array(f['points'][()],dtype = np.float32)
+            if 'dr_x' in f:
+                dr_x = np.float(f['dr_x'][()])
+            else:
+                print("'dr_x' field not found in h5 file, calculating X step size based on scan positions...")
+                dr_x = (np.max(points[0])-np.min(points[0]))/np.sqrt(nz)
+            if 'dr_y' in f:
+                dr_y = np.float(f['dr_y'][()])
+            else:
+                print("'dr_y' field not found in h5 file, calculating Y step size based on scan positions...")
+                dr_y = (np.max(points[1])-np.min(points[1]))/np.sqrt(nz)
+            if 'x_range' in f:
+                x_range = np.float(f['x_range'][()])
+            else:
+                print("'x_range' field not found in h5 file, calculating X scan range based on scan positions...")
+                x_range = (np.max(points[0])-np.min(points[0]))
+            if 'y_range' in f:
+                y_range = np.float(f['y_range'][()])
+            else:
+                print("'y_range' field not found in h5 file, calculating Y scan range based on scan positions...")
+                y_range = (np.max(points[0])-np.min(points[0]))
+            self.sp_x_step_size.setValue(dr_x)
+            self.sp_y_step_size.setValue(dr_y)
+            self.sp_x_scan_range.setValue(x_range)
+            self.sp_y_scan_range.setValue(y_range)
             self.sp_ccd_pixel_um.setValue(f['ccd_pixel_um'][()])
             if 'angle' in f.keys():
                 self.sp_angle.setValue(f['angle'][()])
             else:
-                self.sp_angle.setValue(15.) # backward compatibility for old datasets
-                print("[WARNING] angle not found, assuming 15...", file=sys.stderr)
+                # self.sp_angle.setValue(15.) # backward compatibility for old datasets
+                # print("[WARNING] angle not found, assuming 15...", file=sys.stderr)
+                self.sp_angle.setValue(0.) # Don't assume any angle
             self._scan_points = f['points'][:] # for visualization purpose
             #self.cb_scan_type = ...
             # read the detector name and set it in GUI??
