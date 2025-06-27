@@ -1753,22 +1753,22 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
             points = np.array(f['points'][()],dtype = np.float32)
             if 'dr_x' in f:
-                dr_x = np.float(f['dr_x'][()])
+                dr_x = float(f['dr_x'][()])
             else:
                 print("'dr_x' field not found in h5 file, calculating X step size based on scan positions...")
                 dr_x = (np.max(points[0])-np.min(points[0]))/np.sqrt(nz)
             if 'dr_y' in f:
-                dr_y = np.float(f['dr_y'][()])
+                dr_y = float(f['dr_y'][()])
             else:
                 print("'dr_y' field not found in h5 file, calculating Y step size based on scan positions...")
                 dr_y = (np.max(points[1])-np.min(points[1]))/np.sqrt(nz)
             if 'x_range' in f:
-                x_range = np.float(f['x_range'][()])
+                x_range = float(f['x_range'][()])
             else:
                 print("'x_range' field not found in h5 file, calculating X scan range based on scan positions...")
                 x_range = (np.max(points[0])-np.min(points[0]))
             if 'y_range' in f:
-                y_range = np.float(f['y_range'][()])
+                y_range = float(f['y_range'][()])
             else:
                 print("'y_range' field not found in h5 file, calculating Y scan range based on scan positions...")
                 y_range = (np.max(points[0])-np.min(points[0]))
