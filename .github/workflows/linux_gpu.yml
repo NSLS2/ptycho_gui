@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: read
 
 # Controls when the action will run. Triggers the workflow on push or pull request
 # events but only for the master branch
@@ -23,10 +25,8 @@ jobs:
       
       with:
         submodules: true
-        # a personal access token is added as a secret to this repo
         token: ${{ secrets.GH_ACTIONS_TOKEN }}
-
-    # Runs a single command using the runners shell
+        persist-credentials: false
     - name: Ensure the right machine
       run: hostname
 
