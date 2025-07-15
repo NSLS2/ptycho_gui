@@ -70,7 +70,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         self.ck_recon_subset_flag.clicked.connect(self.updateSubsetFlg)
 
-        self.ck_mode_flag.clicked.connect(self.modeMultiSliceGuard)
         self.ck_afly_flag.clicked.connect(self.updateAflyFlg)
         self.ck_multislice_flag.clicked.connect(self.modeMultiSliceGuard)
         self.ck_mask_obj_flag.clicked.connect(self.updateObjMaskFlg)
@@ -149,7 +148,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.retrieveConfigHistory()
         self.update_gui_from_param()
         self.updateExtraScansFlg()
-        self.updateModeFlg()
         self.updateAflyFlg()
         self.updateMultiSliceFlg()
         self.updateObjMaskFlg()
@@ -272,13 +270,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p.recon_subset_flag = self.ck_recon_subset_flag.isChecked()
         p.recon_subset = str(self.le_recon_subset.text())
 
-        p.mode_flag = self.ck_mode_flag.isChecked()
         p.afly_flag = self.ck_afly_flag.isChecked()
         p.prb_mode_num = self.sp_prb_mode_num.value()
         p.afly_probes = self.sp_afly_probes.value()
         p.obj_mode_num = self.sp_obj_mode_num.value()
-        # if p.mode_flag and "_mode" not in p.sign:
-        #     p.sign = p.sign + "_mode"
 
         p.multislice_flag = self.ck_multislice_flag.isChecked()
         p.slice_num = int(self.sp_slice_num.value())
@@ -309,7 +304,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p.start_update_object = self.sp_start_update_object.value()
         p.ml_mode = self.cb_ml_mode.currentText()
         p.ml_weight = self.sp_ml_weight.value()
-        p.dm_version = self.sp_dm_version.value()
         p.cal_scan_pattern_flag = self.ck_cal_scal_pattern_flag.isChecked()
         p.nth = self.sp_nth.value()
         p.start_ave = self.sp_start_ave.value()
@@ -413,7 +407,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.ck_init_obj_flag.setChecked(p.init_obj_flag)
         self.le_obj_path.setText(str(p.obj_filename or ''))
 
-        self.ck_mode_flag.setChecked(p.mode_flag)
         self.ck_afly_flag.setChecked(p.afly_flag)
         self.sp_prb_mode_num.setValue(int(p.prb_mode_num))
         self.sp_afly_probes.setValue(int(p.afly_probes))
@@ -458,7 +451,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.sp_start_update_object.setValue(p.start_update_object)
         self.cb_ml_mode.setCurrentText(p.ml_mode)
         self.sp_ml_weight.setValue(p.ml_weight)
-        self.sp_dm_version.setValue(p.dm_version)
         self.ck_cal_scal_pattern_flag.setChecked(p.cal_scan_pattern_flag)
         self.sp_nth.setValue(p.nth)
         self.sp_start_ave.setValue(p.start_ave)
@@ -536,12 +528,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
             # init reconStepWindow
             if self.ck_preview_flag.isChecked():
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     info = (self.param.obj_mode_num, self.param.prb_mode_num, 1)
-                elif self.param.multislice_flag:
+                else:
                     info = (self.param.slice_num, 1, 1)
-                else: 
-                    info = (1, 1, 1)
 
                 if self.reconStepWindow is None:
                     self.reconStepWindow = ReconStepWindow(*info)
@@ -671,12 +661,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 self._exportConfigHelper(self._config_path)
             # init reconStepWindow
             if self.ck_preview_flag.isChecked():
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     info = (self.param.obj_mode_num, self.param.prb_mode_num, 1)
-                elif self.param.multislice_flag:
+                else:
                     info = (self.param.slice_num, 1, 1)
-                else: 
-                    info = (1, 1, 1)
 
                 if self.reconStepWindow is None:
                     self.reconStepWindow = ReconStepWindow(*info)
@@ -762,15 +750,12 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         nx_obj = int.from_bytes(mm_list[0].read(8), byteorder='big')
         ny_obj = int.from_bytes(mm_list[0].read(8), byteorder='big') # the file position has been moved by 8 bytes when we get nx_obj
 
-        if p.mode_flag:
+        if not p.multislice_flag:
             self._prb = np.ndarray(shape=(p.n_iterations, p.prb_mode_num, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
             self._obj = np.ndarray(shape=(p.n_iterations, p.obj_mode_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
-        elif p.multislice_flag:
-            self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
         else:
             self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, 1, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
+            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
 
 
     def init_mmap(self):
@@ -787,15 +772,12 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         ny_obj = int.from_bytes(mm_list[0].read(8), byteorder='big') # the file position has been moved by 8 bytes when we get nx_obj
 
     
-        if p.mode_flag:
+        if not p.multislice_flag:
             self._prb = np.ndarray(shape=(p.n_iterations, p.prb_mode_num, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
             self._obj = np.ndarray(shape=(p.n_iterations, p.obj_mode_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
-        elif p.multislice_flag:
-            self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
         else:
             self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, 1, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
+            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=mm_list[2], order='C')
 
 
     def close_mmap(self):
@@ -866,7 +848,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         print("[SUCCESS] generated results are loaded in the preview window. ", end='', file=sys.stderr)
                         print("Slide to frame "+str(p.n_iterations+1)+" and select from drop-down menus.", file=sys.stderr)
                         
-                        if self.param.mode_flag:                            
+                        if not self.param.multislice_flag:                            
                             # load the raw results first
                             data['obj'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
                                                         +'object.npy'))
@@ -909,7 +891,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
                             
                             self.reconStepWindow.result_type_num = 2
-                        elif self.param.multislice_flag:
+                        else:
                             
                             # load raw results
                             data['obj'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
@@ -942,19 +924,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 images.append( np.rot90(np.angle(data['prb_'+str(i)])) )
 
                             self.reconStepWindow.result_type_num = 2
-                        else:
-                            # load data
-                            for tar, target in zip(['obj', 'prb'], ['object', 'probe']):
-                                data[tar] = np.load(data_dir+'recon_'+scan_num+'_'+p.sign+'_'+target+'.npy')
-
-                            # calculate images
-                            # hard-wire the padding values here...
-                            images.append( np.rot90(np.angle(data['obj'][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-                            images.append( np.rot90(np.abs(data['obj'][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-
-                            images.append( np.rot90(np.abs(data['prb'])) )
-                            images.append( np.rot90(np.angle(data['prb'])) )
-                                
+                               
                         self.reconStepWindow.update_images(it, images)
                     elif (it-1) % self.param.display_interval == 0 and not self.param.remote_srv:
 
@@ -964,7 +934,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         # Replace zero with NaN for better visulization
                         oit = self._obj[it-1]
                         oit[np.angle(oit)==0.1] = np.nan
-                        if self.param.mode_flag:
+                        if not self.param.multislice_flag:
                             images = []
                             for i in range(self.param.obj_mode_num):
                                 images.append(np.rot90(np.angle(self._obj[it-1, i])))
@@ -972,7 +942,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             for i in range(self.param.prb_mode_num):
                                 images.append(np.rot90(np.abs(self._prb[it-1, i])))
                                 images.append(np.rot90(np.angle(self._prb[it-1, i])))
-                        elif self.param.multislice_flag:
+                        else:
                             images = []
                             for i in range(self.param.slice_num):
                                 images.append(np.rot90(np.angle(self._obj[it-1, i])))
@@ -980,12 +950,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             #TODO: decide which probe we'd like to present
                             images.append(np.rot90(np.abs(self._prb[it-1, 0])))
                             images.append(np.rot90(np.angle(self._prb[it-1, 0])))
-                        else:
-                            images = [np.rot90(np.angle(self._obj[it-1, 0])),
-                                      np.rot90(np.abs(self._obj[it-1, 0]  )),
-                                      np.rot90(np.abs(self._prb[it-1, 0]  )),
-                                      np.rot90(np.angle(self._prb[it-1, 0]))]
-                            
+
                         self.reconStepWindow.update_images(it, images)
                         self.reconStepWindow.update_metric(it, data)
 
@@ -1002,7 +967,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                     self._obj_live = np.load(obj_live_file)
                                     if np.sum(np.abs(self._prb_live))>0 and np.sum(np.abs(self._obj_live))>0:
                                         break
-                            if self.param.mode_flag:
+                            if not self.param.multislice_flag:
                                 images = []
                                 for i in range(self.param.obj_mode_num):
                                     images.append(np.rot90(np.angle(self._obj_live[i])))
@@ -1010,7 +975,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 for i in range(self.param.prb_mode_num):
                                     images.append(np.rot90(np.abs(self._prb_live[i])))
                                     images.append(np.rot90(np.angle(self._prb_live[i])))
-                            elif self.param.multislice_flag:
+                            else:
                                 images = []
                                 for i in range(self.param.slice_num):
                                     images.append(np.rot90(np.angle(self._obj_live[i])))
@@ -1018,11 +983,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 #TODO: decide which probe we'd like to present
                                 images.append(np.rot90(np.abs(self._prb_live[0])))
                                 images.append(np.rot90(np.angle(self._prb_live[0])))
-                            else:
-                                images = [np.rot90(np.angle(self._obj_live[0])),
-                                        np.rot90(np.abs(self._obj_live[0]  )),
-                                        np.rot90(np.abs(self._prb_live[0]  )),
-                                        np.rot90(np.angle(self._prb_live[0]))]
                                 
                             self.reconStepWindow.update_images(it, images)
                         self.reconStepWindow.update_metric(it, data)
@@ -1109,13 +1069,11 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         Currently our ptycho code does not support simultaneous mode + multi-slice reconstruction.
         This function can be removed once the support is added.
         '''
-        if self.ck_mode_flag.isChecked() and self.ck_multislice_flag.isChecked():
+        if self.sp_prb_mode_num.value()*self.sp_obj_mode_num.value()>1 and  self.ck_multislice_flag.isChecked():
            message = "Currently our ptycho code does not support simultaneous multi-mode + multi-slice reconstruction."
            print("[WARNING] " + message, file=sys.stderr)
            QtWidgets.QMessageBox.warning(self, "Warning", message)
-           self.ck_mode_flag.setChecked(False)
            self.ck_multislice_flag.setChecked(False)
-        self.updateModeFlg()
         self.updateMultiSliceFlg()
     
     def updateSubsetFlg(self):
@@ -1126,19 +1084,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def updateAflyFlg(self):
         afly_flag = self.ck_afly_flag.isChecked()
         self.sp_afly_probes.setEnabled(afly_flag)
-        if afly_flag:
-            self.ck_mode_flag.setChecked(True)
-            self.updateModeFlg()
         self.param.afly_flag = afly_flag
-
-    def updateModeFlg(self):
-        mode_flag = self.ck_mode_flag.isChecked()
-        self.sp_prb_mode_num.setEnabled(mode_flag)
-        self.sp_obj_mode_num.setEnabled(mode_flag)
-        if not mode_flag:
-            self.ck_afly_flag.setChecked(False)
-            self.updateAflyFlg()
-        self.param.mode_flag = mode_flag
 
 
     def updateMultiSliceFlg(self):

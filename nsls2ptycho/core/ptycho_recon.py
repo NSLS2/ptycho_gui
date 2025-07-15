@@ -59,19 +59,13 @@ class PtychoReconRemote(QtCore.QThread):
         obj_list = []
         for i, token in enumerate(tokens):
             if token == 'probe_chi':
-                if self.param.mode_flag:
-                    _parser(i, self.param.prb_mode_num, prb_list)
+                _parser(i, self.param.prb_mode_num, prb_list)
                 #elif self.param.multislice_flag: 
-                #TODO: maybe multislice will have multiple prb in the future?
-                else:
-                    _parser(i, 1, prb_list)
             if token == 'object_chi':
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     _parser(i, self.param.obj_mode_num, obj_list)
-                elif self.param.multislice_flag:
-                    _parser(i, self.param.slice_num, obj_list)
                 else:
-                    _parser(i, 1, obj_list)
+                    _parser(i, self.param.slice_num, obj_list)
 
         # return a dictionary
         result = {'probe_chi':prb_list, 'object_chi':obj_list}
@@ -191,19 +185,12 @@ class PtychoReconWorker(QtCore.QThread):
         obj_list = []
         for i, token in enumerate(tokens):
             if token == 'probe_chi':
-                if self.param.mode_flag:
-                    _parser(i, self.param.prb_mode_num, prb_list)
-                #elif self.param.multislice_flag: 
-                #TODO: maybe multislice will have multiple prb in the future?
-                else:
-                    _parser(i, 1, prb_list)
+                _parser(i, self.param.prb_mode_num, prb_list)
             if token == 'object_chi':
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     _parser(i, self.param.obj_mode_num, obj_list)
-                elif self.param.multislice_flag:
-                    _parser(i, self.param.slice_num, obj_list)
                 else:
-                    _parser(i, 1, obj_list)
+                    _parser(i, self.param.slice_num, obj_list)
 
         # return a dictionary
         result = {'probe_chi':prb_list, 'object_chi':obj_list}
@@ -379,19 +366,12 @@ class PtychoReconLive(QtCore.QThread):
         obj_list = []
         for i, token in enumerate(tokens):
             if token == 'probe_chi':
-                if self.param.mode_flag:
-                    _parser(i, self.param.prb_mode_num, prb_list)
-                #elif self.param.multislice_flag: 
-                #TODO: maybe multislice will have multiple prb in the future?
-                else:
-                    _parser(i, 1, prb_list)
+                _parser(i, self.param.prb_mode_num, prb_list)
             if token == 'object_chi':
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     _parser(i, self.param.obj_mode_num, obj_list)
-                elif self.param.multislice_flag:
-                    _parser(i, self.param.slice_num, obj_list)
                 else:
-                    _parser(i, 1, obj_list)
+                    _parser(i, self.param.slice_num, obj_list)
 
         # return a dictionary
         result = {'probe_chi':prb_list, 'object_chi':obj_list}

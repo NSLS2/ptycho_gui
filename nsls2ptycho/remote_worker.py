@@ -44,15 +44,12 @@ class recon_worker:
         nx_obj = int.from_bytes(self.mm_list[0].read(8), byteorder='big')
         ny_obj = int.from_bytes(self.mm_list[0].read(8), byteorder='big') # the file position has been moved by 8 bytes when we get nx_obj
 
-        if p.mode_flag:
+        if not p.multislice_flag:
             self._prb = np.ndarray(shape=(p.n_iterations, p.prb_mode_num, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
             self._obj = np.ndarray(shape=(p.n_iterations, p.obj_mode_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
-        elif p.multislice_flag:
-            self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
         else:
             self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, 1, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
+            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
     
     def close_mmap(self):
         # We close shared memory as long as the backend is terminated either normally or 

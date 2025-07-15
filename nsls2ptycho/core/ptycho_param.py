@@ -68,7 +68,6 @@ class Param(object):
         self.obj_dir = ''
         self.obj_path = None         # path to existing object array (.npy)
 
-        self.mode_flag = False       # do multi-mode reconstruction
         self.afly_flag = False
         self.afly_probes = 0
         self.prb_mode_num = 5
@@ -103,7 +102,6 @@ class Param(object):
         self.start_update_object = 0
         self.ml_mode = 'Poisson'     # mode for ML
         self.ml_weight = 0.1
-        self.dm_version = 2
         self.cal_scan_pattern_flag = False
 
         self.nth = 5                 # number of points in the first ring
