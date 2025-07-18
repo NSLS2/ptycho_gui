@@ -22,6 +22,11 @@ except:
     print("Unable to access HXN's database, loading from pre-saved h5 files only.", file=sys.stderr)
     hxn_db = None
 
+try:
+    from hxntools.motor_info import motor_table
+except:
+    motor_table = None
+
 
 # ***************************** "Public API" *****************************
 # The following functions must exist in nsls2ptycho/core/*_databroker.py,
@@ -156,30 +161,18 @@ def load_metadata(db, scan_num:int, det_name:str):
         points[1] = np.array(df[scan_motors[1]])
 
         # get angle, ic
-        if scan_motors[1] == 'ssy':
+        if scan_motors[0].startswith('ss'):
             angle = 0#bl.zpsth[1]
-            ic = np.asfarray(df['sclr1_ch3'])
-        elif scan_motors[1] == 'zpssy':
-            if 'tomo_angle_offset'in header.start:
-                angle_offset = header.start['tomo_angle_offset']
-            else:
-                angle_offset = -0.2
-            if 'x_scale_factor'in header.start:
-                x_scale_factor = header.start['x_scale_factor']
-            else:
-                x_scale_factor = 0.9542
-            if 'z_scale_factor'in header.start:
-                z_scale_factor = header.start['z_scale_factor']
-            else:
-                z_scale_factor = 1.0309
-            angle = bl.zpsth[1] - angle_offset
-            if scan_motors[0] == 'zpssx':
-                points[0] = points[0] * x_scale_factor
-                dr_x *= x_scale_factor
-            elif scan_motors[0] == 'zpssz':
-                points[0] = points[0] * z_scale_factor
-                dr_x *= z_scale_factor
-            ic = np.asfarray(df['sclr1_ch4'])
+            try:
+                ic = np.asfarray(df['sclr1_ch3'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
+        elif scan_motors[0].startswith('zpss'):
+            angle = bl.zpsth[1]
+            try:
+                ic = np.asfarray(df['sclr1_ch4'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
         else:
             angle = bl.dsth[1]
             try:
@@ -414,6 +407,13 @@ def load_metadata(db, scan_num:int, det_name:str):
             # get nx and ny by looking at the first image
             # img = db.reg.retrieve(mds_table.iat[0])[0]
             # nx, ny = img.shape # can also give a ValueError; TODO: come up a better way!
+
+    # Correct for motor scaling
+    if motor_table:
+        if scan_motors[0] in motor_table:
+            dr_x *= np.abs(motor_table[scan_motors[0]][1]*1.e4)
+        if scan_motors[1] in motor_table:
+            dr_y *= np.abs(motor_table[scan_motors[1]][1]*1.e4)
 
     handler = db.reg.get_spec_handler(mds_table.iat[0].split('/')[0])
     if hasattr(handler,'_filename'):

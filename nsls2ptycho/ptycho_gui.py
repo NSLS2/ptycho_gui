@@ -16,7 +16,7 @@ from .core.ptycho.utils import parse_config
 from ._version import __version__
 
 # databroker related
-from .core.databroker_api import db, load_metadata, get_single_image, get_detector_names, beamline_name
+from .core.databroker_api import db, load_metadata, save_data, get_single_image, get_detector_names, beamline_name
 
 from .reconStep_gui import ReconStepWindow
 from .roi_gui import RoiWindow
@@ -115,7 +115,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self._prb = None
         self._obj = None
         self._ptycho_gpu_thread = None
-        self._worker_thread = None
+        # self._worker_thread = None
         self._db = None             # hold the Broker instance that contains the info of the given scan id
         self._mds_table = None      # hold a Pandas.dataframe instance
         self._loaded = False        # whether the user has loaded metadata or not (from either databroker or h5)
@@ -125,6 +125,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self._extra_scans_dialog = None
         self._batch_prb_filename = None  # probe's filename template for batch mode
         self._batch_obj_filename = None  # object's filename template for batch mode
+        self._batch_stopped = False
         self._config_path = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_gui_config"
         if not os.path.isdir(os.path.dirname(self._config_path)):
             os.makedirs(os.path.dirname(self._config_path))
@@ -607,8 +608,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             if not self._loaded or not os.path.exists(h5_filename):
                 if self.cb_dataloader.currentText() == "Load from databroker":
                     print('Loading scan from databroker and cropping with current ROI...')
-                    self.crop_scan()
-                    self._worker_thread.finished.connect(self.start)
+                    if self.crop_scan():
+                        self.start()
+                    # self._worker_thread.finished.connect(self.start)
                     return
 
                 if self.cb_dataloader.currentText() == "Load from h5":
@@ -616,9 +618,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         self._loadExpParamH5(str(self.sp_scan_num.value()))
                     except OSError: # no h5 file?
                         print("[Warning] h5 not found... Will try to load scan from databroker first.", file=sys.stderr)
-                        self.crop_scan()
-                        self.cb_dataloader.setCurrentIndex(0)
-                        self._worker_thread.finished.connect(self.start)
+                        if self.crop_scan():
+                            self.cb_dataloader.setCurrentIndex(0)
+                            self.start()
                         return
 
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
@@ -960,7 +962,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             tnow = time.time()
                             prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'prb_live.npy')
                             obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'obj_live.npy')
-                            while (time.time()-tnow)<500:
+                            while (time.time()-tnow)<5:
                                 if os.path.exists(prb_live_file) and os.path.getsize(prb_live_file)>0 and os.path.exists(obj_live_file) and os.path.getsize(obj_live_file)>0:
                                 #time.sleep(1) # wait for the npy files in file system
                                     self._prb_live = np.load(prb_live_file)
@@ -1211,7 +1213,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         if self.cb_dataloader.currentText() == "Load from databroker":
             if not self.ck_batch_crop_flag.isChecked():
                 print("[WARNING] Batch mode with databroker is set, but \"Crop data\" is not.\n"
-                      "[WARNING] Will attempt to load h5 from working directory", file=sys.stderr)
+                    "[WARNING] Will attempt to load h5 from working directory", file=sys.stderr)
         
         try:
             if self.le_batch_items.text() == '':
@@ -1219,7 +1221,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             elif (self.le_batch_items.text()[0]=='/'):
                 self._scan_numbers = None
                 self._track_file = self.le_batch_items.text()
-                print(self._track_file)
+                print('Loading scan numbers from %s...'%self._track_file)
             else:
                 self._scan_numbers = parse_range2(self.le_batch_items.text())
                 print(self._scan_numbers)
@@ -1240,7 +1242,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         except Exception as ex:
             self.exception_handler(ex)
 
-
     def batchStop(self):
         '''
         Brute-force abortion of the entire batch. No resumption is possible.
@@ -1249,15 +1250,16 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.sp_scan_num.valueChanged.connect(self.forceLoad)
         self.stop(True)
         if self.roiWindow is not None:
-            if self.roiWindow._worker_thread is not None:
-                self.roiWindow._worker_thread.disconnect()
-                ## thread.terminate() freezes the whole GUI -- why?
-                #if self.roiWindow._worker_thread.isRunning():
-                #    self.roiWindow._worker_thread.terminate()
-                #    self.roiWindow._worker_thread.wait()
-                self.roiWindow._worker_thread = None
+            # if self.roiWindow._worker_thread is not None:
+            #     self.roiWindow._worker_thread.disconnect()
+            #     ## thread.terminate() freezes the whole GUI -- why?
+            #     #if self.roiWindow._worker_thread.isRunning():
+            #     #    self.roiWindow._worker_thread.terminate()
+            #     #    self.roiWindow._worker_thread.wait()
+            #     self.roiWindow._worker_thread = None
             self.roiWindow = None
         self.resetButtons()
+        self._batch_stopped = True
 
 
     def _batch_manager(self):
@@ -1267,70 +1269,72 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         available computing resources to process the batch item by item, and having more than one worker
         is not helping.
         '''
-        # TODO: think what if anything goes wrong in the middle. Is this robust?
-        if self._scan_numbers is None:
+        
+        self.btn_recon_batch_start.setEnabled(False)
+        self.btn_recon_batch_stop.setEnabled(True)
+        if not self._scan_numbers:
             try:
                 if not self.ck_batch_track.isChecked():
-                    scan_numbers = []
-                    prop_dists = []
-                    work_dir = str(self.le_working_directory.text())
-                    suffix = str(self.le_sign.text())
-                    with open(self._track_file,'r') as file:
-                        lines = file.readlines()
-                        for l in reversed(lines):
-                            try:
-                                snum = int(l.split()[0])
-                                if not os.path.exists(work_dir+'./recon_result/S'+str(snum)+'/'+suffix):
-                                    scan_numbers.append(snum)
-                                    if len(l.split()) > 2:
-                                        prop = float(l.split()[2])
-                                        prop_dists.append(prop)
-                            except:
-                                pass
-                    self._scan_numbers = scan_numbers
-                    if prop_dists:
-                        self._prop_dists = prop_dists
-                    scan_num = self._scan_numbers.pop()
-                    if self._prop_dists:
-                        prop_dist = self._prop_dists.pop()
-                    else:
-                        prop_dist = None
+                    if self._scan_numbers is None:
+                        scan_numbers = []
+                        prop_dists = []
+                        work_dir = str(self.le_working_directory.text())
+                        suffix = str(self.le_sign.text())
+                        with open(self._track_file,'r') as file:
+                            lines = file.readlines()
+                            for l in lines:
+                                try:
+                                    snum = int(l.split()[0])
+                                    if not self.ck_batch_skip_exist.isChecked() or not os.path.exists(work_dir+'./recon_result/S'+str(snum)+'/'+suffix):
+                                        scan_numbers.append(snum)
+                                        if len(l.split()) > 2:
+                                            prop = float(l.split()[2])
+                                            prop_dists.append(prop)
+                                except:
+                                    pass
+                        self._scan_numbers = scan_numbers
+                        if prop_dists:
+                            self._prop_dists = prop_dists
                 else:
                     scan_num = None
+                    prop_dist = None
                     work_dir = str(self.le_working_directory.text())
                     suffix = str(self.le_sign.text())
-                    while scan_num is None:
+                    self._batch_stopped = False
+                    while scan_num is None and not self._batch_stopped:
                         with open(self._track_file,'r') as file:
                             lines = file.readlines()
                             for l in reversed(lines):
                                 try:
                                     snum = int(l.split()[0])
-                                    if not os.path.exists(work_dir+'./recon_result/S'+str(snum)+'/'+suffix):
+                                    if not self.ck_batch_skip_exist.isChecked() or not os.path.exists(work_dir+'./recon_result/S'+str(snum)+'/'+suffix):
                                         scan_num = snum
+                                        if len(l.split()) > 2:
+                                            prop_dist = float(l.split()[2])
+                                        else:
+                                            prop_dist = None
                                         break
                                 except:
                                     pass
                         if scan_num is None:
-                            print("[BATCH] all scans in the list have been reconstructed, pausing 5 seconds")
-                            time.sleep(5)
-                            QtWidgets.QApplication.processEvents()
-
-                print("[BATCH] begin processing scan " + str(scan_num) + "...")
-                self.sp_scan_num.setValue(scan_num)
-                if prop_dist:
-                    self.sp_distance.setValue(prop_dist)
-                self.btn_recon_batch_start.setEnabled(False)
-                self.btn_recon_batch_stop.setEnabled(True)
-
-                if self.ck_batch_crop_flag.isChecked():
-                    self._batch_crop()  # also handles "Run" if needed
-                elif self.ck_batch_run_flag.isChecked():
-                    self._batch_run()  # h5 exists, just "Run"
-                else:
-                    raise
+                            print("[BATCH] all scans in the list have been reconstructed, pausing 5 seconds...")
+                            for i in range(10):
+                                time.sleep(0.5)
+                                QtWidgets.QApplication.processEvents()
+                    if scan_num is not None:
+                        self._scan_numbers = [scan_num]
+                        if prop_dist:
+                            self._prop_dists = [prop_dist]
             except:
-                time.sleep(5)
-        elif len(self._scan_numbers) > 0:
+                traceback.print_exc()
+                print("Batch couldn't load any scan...")
+                self.sp_scan_num.valueChanged.connect(self.forceLoad)
+                self.resetButtons()
+                if self.roiWindow is not None:
+                    self.roiWindow = None
+                return
+
+        if self._scan_numbers is not None and len(self._scan_numbers) > 0:
             scan_num = self._scan_numbers.pop()
             if self._prop_dists:
                 prop_dist = self._prop_dists.pop()
@@ -1340,8 +1344,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self.sp_scan_num.setValue(scan_num)
             if prop_dist:
                 self.sp_distance.setValue(prop_dist)
-            self.btn_recon_batch_start.setEnabled(False)
-            self.btn_recon_batch_stop.setEnabled(True)
 
             if self.ck_batch_crop_flag.isChecked():
                 self._batch_crop()  # also handles "Run" if needed
@@ -1356,15 +1358,14 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self.resetButtons()
             if self.roiWindow is not None:
                 self.roiWindow = None
-
     def _batch_crop(self):
         
-        self.crop_scan()
+        if self.crop_scan():
 
-        if not self.ck_batch_run_flag.isChecked():
-            self._worker_thread.finished.connect(self._batch_manager)
-        else:
-            self._worker_thread.finished.connect(self._batch_run)
+            if not self.ck_batch_run_flag.isChecked():
+                self._batch_manager()
+            else:
+                self._batch_run()
     
     def crop_scan(self):
         # Crop scan using current parameters and bad pixel file without opening the ROI window
@@ -1372,10 +1373,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         # get exp params from databroker
         self.cb_dataloader.setCurrentIndex(1)
 
-        eventloop = QtCore.QEventLoop()
-        self._mainwindow_signal.connect(eventloop.quit)
         self.loadExpParam()
-        eventloop.exec()
         
 
         if self.roiWindow is not None:
@@ -1397,8 +1395,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         # TEST: ROI center
         cx = self.sp_batch_x0.value() + roi_width // 2
         cy = self.sp_batch_y0.value() + roi_height // 2
-        self.save_to_h5(roi_width,roi_height,cx,cy,0,badpixels,None,self.sp_batch_upsample.value(),self.ck_save_diff.isChecked())
-        return
+
+        return self.save_to_h5(roi_width,roi_height,cx,cy,0,badpixels,None,self.sp_batch_upsample.value(),self.ck_save_diff.isChecked())
 
     
     def save_to_h5(self,roi_width,roi_height,cx,cy,threshold,badpixels,blue_rois,upsample,save_diff):
@@ -1408,23 +1406,34 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         if p.z_m == 0.:
             print("[ERROR] detector distance (z_m) is 0 --- maybe forget to set it?", file=sys.stderr)
             return
-
-        thread = self._worker_thread = HardWorker("save_h5", self.db, p, int(p.scan_num), roi_width, roi_height,
-                                       cx, cy, threshold, badpixels, blue_rois, upsample, save_diff)
-        thread.exception_handler = self.exception_handler
-        thread.setTerminationEnabled()
+        
         try:
-            thread.start()
+            print("Saving to h5 file...",end='')
+            save_data(self.db, p, int(p.scan_num), roi_width, roi_height,
+                                        cx, cy, threshold, badpixels, blue_rois, upsample, save_diff)
+            
+            self.sp_batch_x0.setValue(cx - roi_width // 2)
+            self.sp_batch_y0.setValue(cy - roi_height // 2)
+            self.sp_batch_width.setValue(roi_width)
+            self.sp_batch_height.setValue(roi_height)
+            self.sp_x_arr_size.setValue(roi_height)
+            self.sp_y_arr_size.setValue(roi_width)
+            print("done")
+            return True
         except Exception as err:
             print(err)
+            return False
+
+        # thread = HardWorker("save_h5", self.db, p, int(p.scan_num), roi_width, roi_height,
+        #                                cx, cy, threshold, badpixels, blue_rois, upsample, save_diff)
+        # thread.exception_handler = self.exception_handler
+        # thread.setTerminationEnabled()
+        # try:
+        #     thread.start()
+        # except Exception as err:
+        #     print(err)
 
         # update Exp parameters. Note that there's a np.rot90 to the images in save_h5!!!
-        self.sp_batch_x0.setValue(cx - roi_width // 2)
-        self.sp_batch_y0.setValue(cy - roi_height // 2)
-        self.sp_batch_width.setValue(roi_width)
-        self.sp_batch_height.setValue(roi_height)
-        self.sp_x_arr_size.setValue(roi_height)
-        self.sp_y_arr_size.setValue(roi_width)
 
 
     def _batch_run(self):
@@ -1612,18 +1621,29 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             det_name = self.find_detector(det_names)
             self.cb_detectorkind.setCurrentText(det_name)
 
-        # get metadata
-        thread = self._worker_thread \
-               = HardWorker("fetch_data", self.db, scan_id, det_name)
-        thread.update_signal.connect(self._setExpParamBroker)
-        thread.finished.connect(lambda: self.btn_load_scan.setEnabled(True))
-        thread.exception_handler = self.exception_handler
         self.btn_load_scan.setEnabled(False)
         self.btn_view_frame.setEnabled(False)
-        thread.start()
+
+        try:
+            print("loading from databroker...", end='')
+            metadata = load_metadata(self.db,scan_id,det_name)
+            self._setExpParamBroker(metadata)
+        except Exception as err:
+            print(err)
+
+        self.btn_load_scan.setEnabled(True)
 
 
-    def _setExpParamBroker(self, it, metadata:dict):
+        # get metadata
+        # thread = HardWorker("fetch_data", self.db, scan_id, det_name)
+        # thread.update_signal.connect(self._setExpParamBroker)
+        # thread.finished.connect(lambda: self.btn_load_scan.setEnabled(True))
+        # thread.exception_handler = self.exception_handler
+        
+        # thread.start()
+
+
+    def _setExpParamBroker(self, metadata:dict):
         '''
         Notes:
         1. The parameter "it" is just a placeholder for the signal 
@@ -1657,7 +1677,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self._scan_points = metadata['points']
         print("done")
         self.btn_view_frame.setEnabled(True)
-        self._mainwindow_signal.emit()
 
 
     def setLoadButton(self):

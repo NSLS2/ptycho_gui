@@ -106,9 +106,14 @@ class PtychoReconRemote(QtCore.QThread):
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
         # try:
-        while True:
+        time.sleep(1)
+        out = self.msg.readlines()
+        while not out:
+            print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
+            time.sleep(1)
             out = self.msg.readlines()
-            
+
+        while True:
             for line in out:
                 print(line, end='') # because the line already ends with '\n'
                 tokens = line.split()
@@ -124,6 +129,7 @@ class PtychoReconRemote(QtCore.QThread):
                 break
             
             time.sleep(0.1)
+            out = self.msg.readlines()
         # except:
         #     pass
         # finally:

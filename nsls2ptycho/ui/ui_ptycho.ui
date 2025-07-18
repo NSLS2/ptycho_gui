@@ -2458,7 +2458,7 @@
         <property name="geometry">
          <rect>
           <x>20</x>
-          <y>60</y>
+          <y>70</y>
           <width>701</width>
           <height>28</height>
          </rect>
@@ -2732,6 +2732,31 @@
          <item>
           <widget class="QLineEdit" name="le_batch_badpixel">
            <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+       <widget class="QWidget" name="horizontalLayoutWidget_2">
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>50</y>
+          <width>701</width>
+          <height>23</height>
+         </rect>
+        </property>
+        <layout class="QHBoxLayout" name="horizontalLayout_23">
+         <item>
+          <widget class="QCheckBox" name="ck_batch_skip_exist">
+           <property name="layoutDirection">
+            <enum>Qt::LeftToRight</enum>
+           </property>
+           <property name="text">
+            <string>Skip if recon already exists</string>
+           </property>
+           <property name="checked">
             <bool>true</bool>
            </property>
           </widget>
