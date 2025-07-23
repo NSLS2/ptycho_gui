@@ -29,7 +29,8 @@ def _load_HXN():
     get_single_image = hxn_databroker.get_single_image
     get_detector_names = hxn_databroker.get_detector_names
     db = hxn_databroker.hxn_db
-    print("HXN's Databroker is enabled.", file=sys.stderr)
+    if db is not None:
+        print("HXN's Databroker is enabled.", file=sys.stderr)
 
 
 def _load_CSX():
@@ -40,7 +41,8 @@ def _load_CSX():
     get_single_image = csx_databroker.get_single_image
     get_detector_names = csx_databroker.get_detector_names
     db = csx_databroker.csx_db
-    print("CSX's Databroker is enabled.", file=sys.stderr)
+    if db is not None:
+        print("CSX's Databroker is enabled.", file=sys.stderr)
 
 
 try:

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+requires-python = ">=3.9"
+name = "nsls2ptycho"
+description = "NSLS-II Ptychography Software"
+authors = [
+    { name = "Leo Fang" },
+    { name = "Zirui Gao" },
+    { name = "Sungsoo Ha" },
+    { name = "Zhihua Dong" },
+    { name = "Xiaojing Huang" , email = "xjhuang@bnl.gov" }
+]
+readme = "README.md"
+license = {file = "LICENSE"}
+dynamic = ["version","dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/NSLS2/ptycho_gui"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["nsls2ptycho*"]
