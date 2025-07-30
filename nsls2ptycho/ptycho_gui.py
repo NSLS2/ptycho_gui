@@ -1741,10 +1741,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             else:
                 nz = f['points'].shape[1]
                 roi = np.array(f['raw_data/roi'])
-                nx = roi[0,1] - roi[0,0]
-                ny = roi[1,1] - roi[1,0]
-                self.sp_batch_x0.setValue(roi[0,0])
-                self.sp_batch_y0.setValue(roi[1,0])
+                nx = roi[1,1] - roi[1,0]
+                ny = roi[0,1] - roi[0,0]
+                self.sp_batch_x0.setValue(roi[1,0])
+                self.sp_batch_y0.setValue(roi[0,0])
                 self.sp_batch_width.setValue(nx)
                 self.sp_batch_height.setValue(ny)
             self.sp_x_arr_size.setValue(nx)
