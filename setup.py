@@ -37,9 +37,9 @@ try:
 except ImportError:
     print("CuPy not found. Will install...", file=sys.stderr)
     try:
-        with os.popen('nvidia-smi --version') as stream:
+        with os.popen('nvidia-smi') as stream:
             nv_version = stream.read()
-        match = re.search(r'CUDA Version\s+:\s+(\d+\.+\d)',nv_version)
+        match = re.search(r'CUDA Version+:\s+(\d+\.+\d)',nv_version)
         cuda_version = match.group(1)
         print(f'Cuda version {cuda_version} detected')
         cupy_package = 'cupy-cuda'+cuda_version.split('.')[0]+'x'

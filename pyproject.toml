@@ -14,7 +14,7 @@ authors = [
     { name = "Xiaojing Huang" , email = "xjhuang@bnl.gov" }
 ]
 readme = "README.md"
-license = {file = "LICENSE"}
+license-files = ["LICENSE"]
 dynamic = ["version","dependencies"]
 
 [project.urls]

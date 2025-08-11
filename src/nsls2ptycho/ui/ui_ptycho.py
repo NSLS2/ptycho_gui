@@ -267,6 +267,7 @@ class Ui_MainWindow(object):
         self.cb_alg2_flag.addItem("")
         self.horizontalLayout_4.addWidget(self.cb_alg2_flag)
         self.sp_alg_percentage = QtWidgets.QDoubleSpinBox(self.tab)
+        self.sp_alg_percentage.setSingleStep(0.05)
         self.sp_alg_percentage.setProperty("value", 0.8)
         self.sp_alg_percentage.setObjectName("sp_alg_percentage")
         self.horizontalLayout_4.addWidget(self.sp_alg_percentage)

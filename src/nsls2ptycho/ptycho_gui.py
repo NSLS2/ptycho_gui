@@ -507,8 +507,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.ck_save_diff.setChecked(p.save_diff)
         self.reset_at_next = False
         
-
-        # batch param group, necessary?
     def start_live(self):
         try:
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
@@ -740,6 +738,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             if self.scanWindow is not None:
                 self.scanWindow.reset_window()
 
+
     def reload_mmap(self):
         p = self.param
         datasize = 8 if p.precision == 'single' else 16
@@ -807,198 +806,199 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
 
     def update_recon_step(self, it, data=None):
+        try:
+            self.recon_bar.setValue(it)
 
-        self.recon_bar.setValue(it)
+            if data == 'flush':
+                self.reconStepWindow.image_buffer = {}
+                self.reconStepWindow.current_max_iters = 1
+                self.reset_at_next = True
 
-        if data == 'flush':
-            self.reconStepWindow.image_buffer = {}
-            self.reconStepWindow.current_max_iters = 1
-            self.reset_at_next = True
+            if self.reconStepWindow is not None:
+                self.reconStepWindow.update_iter(it)
 
-        if self.reconStepWindow is not None:
-            self.reconStepWindow.update_iter(it)
+                if not _TEST and self.ck_preview_flag.isChecked():
+                    try:
+                        if it == -1 and data == 'init_mmap':
+                            try:
+                                # the two npy are created by ptycho by this time
+                                self.init_mmap()
+                            except ExistentialError:
+                                # user may kill the process prematurely
+                                self.stop()
+                        elif it == -1 and data == 'reload':
+                            try:
+                                # the two npy are created by ptycho by this time
+                                self.reload_mmap()
+                            except ExistentialError:
+                                # user may kill the process prematurely
+                                self.stop()
+                        elif it == self.param.n_iterations+1:
+                            # reserve it=n_iterations+1 as the working space
+                            self.reconStepWindow.current_max_iters = self.param.n_iterations
 
-            if not _TEST and self.ck_preview_flag.isChecked():
-                try:
-                    if it == -1 and data == 'init_mmap':
-                        try:
-                            # the two npy are created by ptycho by this time
-                            self.init_mmap()
-                        except ExistentialError:
-                            # user may kill the process prematurely
-                            self.stop()
-                    elif it == -1 and data == 'reload':
-                        try:
-                            # the two npy are created by ptycho by this time
-                            self.reload_mmap()
-                        except ExistentialError:
-                            # user may kill the process prematurely
-                            self.stop()
-                    elif it == self.param.n_iterations+1:
-                        # reserve it=n_iterations+1 as the working space
-                        self.reconStepWindow.current_max_iters = self.param.n_iterations
+                            p = self.param
+                            if not p.postprocessing_flag:
+                                return
+                            work_dir = p.working_directory
+                            scan_num = str(p.scan_num)
+                            data_dir = os.path.join(work_dir,'recon_result/S'+scan_num+'/'+p.sign+'/recon_data/')
+                            data = {}
+                            images = []
 
-                        p = self.param
-                        if not p.postprocessing_flag:
-                            return
-                        work_dir = p.working_directory
-                        scan_num = str(p.scan_num)
-                        data_dir = os.path.join(work_dir,'recon_result/S'+scan_num+'/'+p.sign+'/recon_data/')
-                        data = {}
-                        images = []
-
-                        print("[SUCCESS] generated results are loaded in the preview window. ", end='', file=sys.stderr)
-                        print("Slide to frame "+str(p.n_iterations+1)+" and select from drop-down menus.", file=sys.stderr)
-                        
-                        if not self.param.multislice_flag:                            
-                            # load the raw results first
-                            data['obj'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                        +'object.npy'))
-                            for i in range(self.param.obj_mode_num):
-                                # hard-wire the padding values here...
-                                images.append( np.rot90(np.angle(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-                                images.append( np.rot90(np.abs(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-
-                            # load data that has been averaged + orthonormalized + phase-ramp removed
-                            if os.path.exists(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' +'object_mode_orth_ave_rp_mode_'+str(i)+'.npy')):
+                            print("[SUCCESS] generated results are loaded in the preview window. ", end='', file=sys.stderr)
+                            print("Slide to frame "+str(p.n_iterations+1)+" and select from drop-down menus.", file=sys.stderr)
+                            
+                            if not self.param.multislice_flag:                            
+                                # load the raw results first
+                                data['obj'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                            +'object.npy'))
                                 for i in range(self.param.obj_mode_num):
-                                    data['obj_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                                +'object_mode_orth_ave_rp_mode_'+str(i)+'.npy'))   
-                                    self.reconStepWindow.cb_image_object.addItem("Object "+str(i)+" (orth_ave_rp)")
                                     # hard-wire the padding values here...
-                                    images.append( np.rot90(np.angle(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-                                    images.append( np.rot90(np.abs(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-                            else:
-                                for i in range(self.param.obj_mode_num):
                                     images.append( np.rot90(np.angle(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
                                     images.append( np.rot90(np.abs(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
 
-                            data['prb'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                        +'probe.npy'))
-                            for i in range(self.param.prb_mode_num):
-                                images.append( np.rot90(np.abs(data['prb'][i])) )
-                                images.append( np.rot90(np.angle(data['prb'][i])) )
-
-                            if os.path.exists(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' +'probe_mode_orth_ave_rp_mode_'+str(i)+'.npy')):
-                                for i in range(self.param.prb_mode_num):
-                                    data['prb_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                                +'probe_mode_orth_ave_rp_mode_'+str(i)+'.npy'))
-                                    self.reconStepWindow.cb_image_probe.addItem("Probe "+str(i)+" (orth_ave_rp)")
-                                    images.append( np.rot90(np.abs(data['prb_'+str(i)])) )
-                                    images.append( np.rot90(np.angle(data['prb_'+str(i)])) )# load data that has been averaged + orthonormalized + phase-ramp removed
+                                # load data that has been averaged + orthonormalized + phase-ramp removed
+                                if os.path.exists(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' +'object_mode_orth_ave_rp_mode_'+str(i)+'.npy')):
+                                    for i in range(self.param.obj_mode_num):
+                                        data['obj_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                                    +'object_mode_orth_ave_rp_mode_'+str(i)+'.npy'))   
+                                        self.reconStepWindow.cb_image_object.addItem("Object "+str(i)+" (orth_ave_rp)")
+                                        # hard-wire the padding values here...
+                                        images.append( np.rot90(np.angle(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                        images.append( np.rot90(np.abs(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
                                 else:
+                                    for i in range(self.param.obj_mode_num):
+                                        images.append( np.rot90(np.angle(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                        images.append( np.rot90(np.abs(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+
+                                data['prb'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                            +'probe.npy'))
+                                for i in range(self.param.prb_mode_num):
+                                    images.append( np.rot90(np.abs(data['prb'][i])) )
+                                    images.append( np.rot90(np.angle(data['prb'][i])) )
+
+                                if os.path.exists(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' +'probe_mode_orth_ave_rp_mode_'+str(i)+'.npy')):
                                     for i in range(self.param.prb_mode_num):
-                                        images.append( np.rot90(np.abs(data['prb'][i])) )
-                                        images.append( np.rot90(np.angle(data['prb'][i])) )
+                                        data['prb_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                                    +'probe_mode_orth_ave_rp_mode_'+str(i)+'.npy'))
+                                        self.reconStepWindow.cb_image_probe.addItem("Probe "+str(i)+" (orth_ave_rp)")
+                                        images.append( np.rot90(np.abs(data['prb_'+str(i)])) )
+                                        images.append( np.rot90(np.angle(data['prb_'+str(i)])) )# load data that has been averaged + orthonormalized + phase-ramp removed
+                                    else:
+                                        for i in range(self.param.prb_mode_num):
+                                            images.append( np.rot90(np.abs(data['prb'][i])) )
+                                            images.append( np.rot90(np.angle(data['prb'][i])) )
 
-                            
-                            self.reconStepWindow.result_type_num = 2
-                        else:
-                            
-                            # load raw results
-                            data['obj'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                        +'object.npy'))
-                            for i in range(self.param.slice_num):
-                                # hard-wire the padding values here...
-                                images.append( np.rot90(np.angle(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-                                images.append( np.rot90(np.abs(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                
+                                self.reconStepWindow.result_type_num = 2
+                            else:
+                                # load raw results
+                                data['obj'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                            +'object.npy'))
+                                for i in range(self.param.slice_num):
+                                    # hard-wire the padding values here...
+                                    images.append( np.rot90(np.angle(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                    images.append( np.rot90(np.abs(data['obj'][i,(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
 
-                            # load data that has been averaged + phase-ramp removed
-                            for i in range(self.param.slice_num):
-                                data['obj_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                            +'object_ave_rp_ms_'+str(i)+'.npy'))
-                                self.reconStepWindow.cb_image_object.addItem("Object "+str(i)+" (ave_rp)")
-                                # hard-wire the padding values here...
-                                images.append( np.rot90(np.angle(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
-                                images.append( np.rot90(np.abs(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                # load data that has been averaged + phase-ramp removed
+                                for i in range(self.param.slice_num):
+                                    data['obj_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                                +'object_ave_rp_ms_'+str(i)+'.npy'))
+                                    self.reconStepWindow.cb_image_object.addItem("Object "+str(i)+" (ave_rp)")
+                                    # hard-wire the padding values here...
+                                    images.append( np.rot90(np.angle(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
+                                    images.append( np.rot90(np.abs(data['obj_'+str(i)][(p.nx+30)//2:-(p.nx+30)//2, (p.ny+30)//2:-(p.ny+30)//2])) )
 
-                            data['prb'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                        +'probe.npy'))
-                            for i in range(self.param.slice_num):
-                                images.append( np.rot90(np.abs(data['prb'][i])) )
-                                images.append( np.rot90(np.angle(data['prb'][i])) )
+                                data['prb'] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                            +'probe.npy'))
+                                for i in range(self.param.slice_num):
+                                    images.append( np.rot90(np.abs(data['prb'][i])) )
+                                    images.append( np.rot90(np.angle(data['prb'][i])) )
 
-                            for i in range(self.param.slice_num):
-                                data['prb_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
-                                                            +'probe_ave_rp_ms_'+str(i)+'.npy'))
-                                self.reconStepWindow.cb_image_probe.addItem("Probe "+str(i)+" (ave_rp)")
-                                images.append( np.rot90(np.abs(data['prb_'+str(i)])) )
-                                images.append( np.rot90(np.angle(data['prb_'+str(i)])) )
+                                for i in range(self.param.slice_num):
+                                    data['prb_'+str(i)] = np.load(os.path.join(data_dir,'recon_'+scan_num+'_'+p.sign+'_' \
+                                                                +'probe_ave_rp_ms_'+str(i)+'.npy'))
+                                    self.reconStepWindow.cb_image_probe.addItem("Probe "+str(i)+" (ave_rp)")
+                                    images.append( np.rot90(np.abs(data['prb_'+str(i)])) )
+                                    images.append( np.rot90(np.angle(data['prb_'+str(i)])) )
 
-                            self.reconStepWindow.result_type_num = 2
-                               
-                        self.reconStepWindow.update_images(it, images)
-                    elif (it-1) % self.param.display_interval == 0 and not self.param.remote_srv:
-
-                        if self.reset_at_next:
-                            self.reconStepWindow.reset_figs()
-                            self.reset_at_next = False    
-                        # Replace zero with NaN for better visulization
-                        oit = self._obj[it-1]
-                        oit[np.angle(oit)==0.1] = np.nan
-                        if not self.param.multislice_flag:
-                            images = []
-                            for i in range(self.param.obj_mode_num):
-                                images.append(np.rot90(np.angle(self._obj[it-1, i])))
-                                images.append(np.rot90(np.abs(self._obj[it-1, i])))
-                            for i in range(self.param.prb_mode_num):
-                                images.append(np.rot90(np.abs(self._prb[it-1, i])))
-                                images.append(np.rot90(np.angle(self._prb[it-1, i])))
-                        else:
-                            images = []
-                            for i in range(self.param.slice_num):
-                                images.append(np.rot90(np.angle(self._obj[it-1, i])))
-                                images.append(np.rot90(np.abs(self._obj[it-1, i])))
-                            #TODO: decide which probe we'd like to present
-                            images.append(np.rot90(np.abs(self._prb[it-1, 0])))
-                            images.append(np.rot90(np.angle(self._prb[it-1, 0])))
-
-                        self.reconStepWindow.update_images(it, images)
-                        self.reconStepWindow.update_metric(it, data)
-
-                    elif (it-1) % self.param.display_interval == 0 and self.param.remote_srv:
-
-                        if self.it_last - it < self.param.display_interval:
-                            tnow = time.time()
-                            prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'prb_live.npy')
-                            obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'obj_live.npy')
-                            while (time.time()-tnow)<5:
-                                if os.path.exists(prb_live_file) and os.path.getsize(prb_live_file)>0 and os.path.exists(obj_live_file) and os.path.getsize(obj_live_file)>0:
-                                #time.sleep(1) # wait for the npy files in file system
-                                    self._prb_live = np.load(prb_live_file)
-                                    self._obj_live = np.load(obj_live_file)
-                                    if np.sum(np.abs(self._prb_live))>0 and np.sum(np.abs(self._obj_live))>0:
-                                        break
+                                self.reconStepWindow.result_type_num = 2
+                                
+                            self.reconStepWindow.update_images(it, images)
+                        elif (it-1) % self.param.display_interval == 0 and not self.param.remote_srv:
+                            if self.reset_at_next:
+                                self.reconStepWindow.reset_figs()
+                                self.reset_at_next = False    
+                            # Replace zero with NaN for better visulization
+                            oit = self._obj[it-1]
+                            oit[np.angle(oit)==0.1] = np.nan
                             if not self.param.multislice_flag:
                                 images = []
                                 for i in range(self.param.obj_mode_num):
-                                    images.append(np.rot90(np.angle(self._obj_live[i])))
-                                    images.append(np.rot90(np.abs(self._obj_live[i])))
+                                    images.append(np.rot90(np.angle(self._obj[it-1, i])))
+                                    images.append(np.rot90(np.abs(self._obj[it-1, i])))
                                 for i in range(self.param.prb_mode_num):
-                                    images.append(np.rot90(np.abs(self._prb_live[i])))
-                                    images.append(np.rot90(np.angle(self._prb_live[i])))
+                                    images.append(np.rot90(np.abs(self._prb[it-1, i])))
+                                    images.append(np.rot90(np.angle(self._prb[it-1, i])))
                             else:
                                 images = []
                                 for i in range(self.param.slice_num):
-                                    images.append(np.rot90(np.angle(self._obj_live[i])))
-                                    images.append(np.rot90(np.abs(self._obj_live[i])))
+                                    images.append(np.rot90(np.angle(self._obj[it-1, i])))
+                                    images.append(np.rot90(np.abs(self._obj[it-1, i])))
                                 #TODO: decide which probe we'd like to present
-                                images.append(np.rot90(np.abs(self._prb_live[0])))
-                                images.append(np.rot90(np.angle(self._prb_live[0])))
-                                
-                            self.reconStepWindow.update_images(it, images)
-                        self.reconStepWindow.update_metric(it, data)
+                                images.append(np.rot90(np.abs(self._prb[it-1, 0])))
+                                images.append(np.rot90(np.angle(self._prb[it-1, 0])))
 
-                except: # when MPI processes are terminated, _prb and _obj are deleted and so not subscriptable 
-                    traceback.print_exc()
+                            self.reconStepWindow.update_images(it, images)
+                            self.reconStepWindow.update_metric(it, data)
+
+                        elif (it-1) % self.param.display_interval == 0 and self.param.remote_srv:
+                            if self.it_last - it < self.param.display_interval:
+                                tnow = time.time()
+                                prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'prb_live.npy')
+                                obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'obj_live.npy')
+                                while (time.time()-tnow)<5:
+                                    if os.path.exists(prb_live_file) and os.path.getsize(prb_live_file)>0 and os.path.exists(obj_live_file) and os.path.getsize(obj_live_file)>0:
+                                    #time.sleep(1) # wait for the npy files in file system
+                                        self._prb_live = np.load(prb_live_file)
+                                        self._obj_live = np.load(obj_live_file)
+                                        if np.sum(np.abs(self._prb_live))>0 and np.sum(np.abs(self._obj_live))>0:
+                                            break
+                                if not self.param.multislice_flag:
+                                    images = []
+                                    for i in range(self.param.obj_mode_num):
+                                        images.append(np.rot90(np.angle(self._obj_live[i])))
+                                        images.append(np.rot90(np.abs(self._obj_live[i])))
+                                    for i in range(self.param.prb_mode_num):
+                                        images.append(np.rot90(np.abs(self._prb_live[i])))
+                                        images.append(np.rot90(np.angle(self._prb_live[i])))
+                                else:
+                                    images = []
+                                    for i in range(self.param.slice_num):
+                                        images.append(np.rot90(np.angle(self._obj_live[i])))
+                                        images.append(np.rot90(np.abs(self._obj_live[i])))
+                                    #TODO: decide which probe we'd like to present
+                                    images.append(np.rot90(np.abs(self._prb_live[0])))
+                                    images.append(np.rot90(np.angle(self._prb_live[0])))
+                                    
+                                self.reconStepWindow.update_images(it, images)
+                            self.reconStepWindow.update_metric(it, data)
+
+                    except: # when MPI processes are terminated, _prb and _obj are deleted and so not subscriptable 
+                        traceback.print_exc()
+                        pass
+                else:
                     pass
-            else:
-                # -------------------- Sungsoo version -------------------------------------
-                # a list of random images for test
-                # in the order of [object_amplitude, object_phase, probe_amplitude, probe_phase]
-                images = [np.random.random((128,128)) for _ in range(4)]
-                self.reconStepWindow.update_images(it, images)
-                self.reconStepWindow.update_metric(it, data)
+                    # -------------------- Sungsoo version -------------------------------------
+                    # a list of random images for test
+                    # in the order of [object_amplitude, object_phase, probe_amplitude, probe_phase]
+                    images = [np.random.random((128,128)) for _ in range(4)]
+                    self.reconStepWindow.update_images(it, images)
+                    self.reconStepWindow.update_metric(it, data)
+        except:
+            traceback.print_exc()
+            print('Reconstep update error')
 
 
     def loadProbe(self):
@@ -1706,10 +1706,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             else:
                 nz = f['points'].shape[1]
                 roi = np.array(f['raw_data/roi'])
-                nx = roi[0,1] - roi[0,0]
-                ny = roi[1,1] - roi[1,0]
-                self.sp_batch_x0.setValue(roi[0,0])
-                self.sp_batch_y0.setValue(roi[1,0])
+                nx = roi[1,1] - roi[1,0]
+                ny = roi[0,1] - roi[0,0]
+                self.sp_batch_x0.setValue(roi[1,0])
+                self.sp_batch_y0.setValue(roi[0,0])
                 self.sp_batch_width.setValue(nx)
                 self.sp_batch_height.setValue(ny)
             self.sp_x_arr_size.setValue(nx)

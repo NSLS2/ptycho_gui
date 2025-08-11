@@ -112,6 +112,13 @@ class PtychoReconRemote(QtCore.QThread):
             print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
             time.sleep(1)
             out = self.msg.readlines()
+            if os.path.isfile(os.path.join(self.remote_path,'abort')):
+                os.remove(os.path.join(self.remote_path,'abort'))
+                if os.path.isfile(os.path.join(self.remote_path,'msg')):
+                    os.remove(os.path.join(self.remote_path,'msg'))
+                if os.path.isfile(self.fname_full):
+                    os.remove(self.fname_full)
+                raise Exception('Remote recon aborted...')
 
         while True:
             for line in out:
@@ -485,11 +492,12 @@ class PtychoReconLive(QtCore.QThread):
                 message = "At least one MPI process returned a nonzero value, so the whole job is aborted.\n"
                 message += "If you did not manually terminate it, consult the Traceback above to identify the problem."
                 raise Exception(message)
-        except Exception as ex:
+        except:
             traceback.print_exc()
             #print(ex, file=sys.stderr)
             #raise ex
         finally:
+            pass
             # clean up temp file
             filepath = param.working_directory + "/." + param.shm_name + ".txt"
             if os.path.isfile(filepath):
