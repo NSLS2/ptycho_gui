@@ -86,6 +86,19 @@ class PtychoReconRemote(QtCore.QThread):
 
         return stdout_2.split()
 
+    def export_slurm_header(self):
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
+        with open(slurm_header, 'w') as f:
+            f.write(self.remote_path+' '+str(len(self.param.gpus))+'\n')
+
+    def clear_slurm_header(self):
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
+        if os.path.exists(slurm_header):
+            try:
+                os.remove(slurm_header)
+            except:
+                pass
+    
     def recon_remote(self, param:Param, update_fcn=None):
 
         self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign)
@@ -102,6 +115,7 @@ class PtychoReconRemote(QtCore.QThread):
             param.obj_path = os.path.realpath(param.obj_path)
         
         save_config(self.fname_full,param)
+        self.export_slurm_header()
 
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
@@ -158,6 +172,7 @@ class PtychoReconRemote(QtCore.QThread):
                 self.update_signal.emit(self.param.n_iterations+1,None)
             
         finally:
+            self.clear_slurm_header()
             print('finally?')
 
     def kill(self):
@@ -227,10 +242,7 @@ class PtychoReconWorker(QtCore.QThread):
     def recon_api(self, param:Param, update_fcn=None):
         parent_module = '.'.join(self.__module__.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
         # "1" is just a placeholder to be overwritten soon
-        if param.gpu_flag and len(param.gpus) == 1:
-            mpirun_command = ["mpirun", "-n", "1", "python", "-W", "ignore", "-m",parent_module+".ptycho.recon_ptycho_gui","%d"%param.gpus[0]]
-        else:
-            mpirun_command = ["mpirun", "-n", "1", "python", "-W", "ignore", "-m",parent_module+".ptycho.recon_ptycho_gui"]
+        mpirun_command = ["mpirun", "-n", "1", "python", "-W", "ignore", "-m",parent_module+".ptycho.recon_ptycho_gui"]
 
         if param.mpi_file_path == '':
             if param.gpu_flag:

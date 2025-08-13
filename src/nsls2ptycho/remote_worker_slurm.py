@@ -5,14 +5,16 @@ from fcntl import fcntl, F_GETFL, F_SETFL
 from os import O_NONBLOCK
 import traceback
 import numpy as np
+import time
 
 # for frontend-backend communication
 from posix_ipc import SharedMemory, ExistentialError
 import mmap
 
-SLURM_SERVER_NAME = 'orion'
+wait_timeout = 30
+start_time = 0
 
-class recon_worker:
+class recon_worker_slurm:
     def exit(self,sig,frame):
         print('Ctrl+C!')
         self.msg_export('[Working]Aborting...')
@@ -22,10 +24,8 @@ class recon_worker:
         self.abort_recon()
         sys.exit(0)
     
-    def __init__(self,work_path):
-        self.work_path = work_path
-        self.srv_name = socket.gethostname().split('.')[0]
-        self.monitor_path = os.path.join(os.path.abspath(self.work_path),'remote_'+self.srv_name)
+    def __init__(self,config_path):
+        self.monitor_path = config_path
         self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'))
         self.fname = None
         self.fname_full = None
@@ -202,8 +202,10 @@ class recon_worker:
 
 
     def monitor(self):
+        global start_time
         print('Ptycho worker started monitoring path '+self.monitor_path)
-        while True:
+        job_done = False
+        while not job_done and (time.time() - start_time)<wait_timeout:
             if not os.path.isdir(self.monitor_path):
                 print(f'Waiting for monitored path {self.monitor_path} to be created...')
                 time.sleep(3)
@@ -222,85 +224,24 @@ class recon_worker:
                     else:
                         print(__loader__.name)
                         self.msg_export('[Warning]Another session of ptycho worker is running on this server or the previous worker didn\'t exit normally')
+                    job_done = True
 
-def slurm_server_monitor(slurm_header = None):
-    if slurm_header is None:
-        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
-    while True:
-        l = None
-        try:
-            os.listdir(os.path.expanduser("~") + "/.ptycho_gui/")
-            with open(slurm_header,'r') as f:
-                l = f.readlines()[0].split()
-        except:
-            l = None
-
-        if l is None:
-            print('Waiting for slurm task...')
-            time.sleep(3)
-        else:
-            remote_config_path = l[0]
-            nthreads = l[1]
-            parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
-            srun_command = ["srun","--gpus="+nthreads, "--ntasks="+nthreads,\
-                            "bash","-c","source load-hxn; python -W ignore -m "+parent_module+".remote_worker_slurm "+remote_config_path]
-
-            srun_command = set_flush_early(srun_command)
-            
-            print(srun_command)
-            
-            with subprocess.Popen(srun_command,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                env=dict(os.environ, mpi_warn_on_fork='0')) as run_ptycho_slurm:
-
-                # idea: if we attempts to readline from an empty pipe, it will block until 
-                # at least one line is piped in. However, stderr is ususally empty, so reading
-                # from it is very likely to block the output until the subprocess ends, which 
-                # is bad. Thus, we want to set the O_NONBLOCK flag for stderr, see
-                # http://eyalarubas.com/python-subproc-nonblock.html 
-                #
-                # Note that it is unclear if readline in Python 3.5+ is guaranteed safe with 
-                # non-blocking pipes or not. See https://bugs.python.org/issue1175#msg56041 
-                # and https://stackoverflow.com/questions/375427/
-                # If this is a concern, using the asyncio module could be a safer approach?
-                # One could also process stdout in one loop and then stderr in another, which
-                # will not have the blocking issue.
-                flags = fcntl(run_ptycho_slurm.stdout, F_GETFL) # first get current stderr flags
-                fcntl(run_ptycho_slurm.stdout, F_SETFL, flags | O_NONBLOCK)
-                flags = fcntl(run_ptycho_slurm.stderr, F_GETFL) # first get current stderr flags
-                fcntl(run_ptycho_slurm.stderr, F_SETFL, flags | O_NONBLOCK)
-
-                while True:
-                    stdout = run_ptycho_slurm.stdout.readline()
-                    stderr = run_ptycho_slurm.stderr.readline() # without O_NONBLOCK this will very likely block
-                    
-                    if stdout:
-                        stdout = stdout.decode('utf-8')
-                        print(stdout.strip())
-
-                    if stderr:
-                        stderr = stderr.decode('utf-8')
-                        print(stderr.strip())
-
-                    if (run_ptycho_slurm.poll() is not None) and (stdout==b'') and (stderr==b''):
-                        break
-                    
-            time.sleep(1)
-
-
-            
 def main():
-    srv_name = socket.gethostname().split('.')[0]
-
-    if srv_name.startswith(SLURM_SERVER_NAME):
-        print(f'{srv_name} is a slurm allocation server, running in slurm monitor mode...')
-        signal.signal(signal.SIGINT,sys.exit)
-        slurm_server_monitor()
+    if not 'SLURM_PROCID' in os.environ or os.environ['SLURM_PROCID'] != '0':
+        return
+    if len(sys.argv) == 1: # started without argument
+        # parse the config file in home folder
+        config_path = os.path.expanduser("~") + "/.ptycho_gui/remote_task/"
+    elif len(sys.argv) == 2: # started from commandline: python recon_ptycho_gui.py input_file
+        config_path = sys.argv[1]
     else:
-        r = recon_worker('.')
-        signal.signal(signal.SIGINT,r.exit)
-        r.monitor()
+        raise Exception("action not allowed, abort")
+    
+    r = recon_worker_slurm(config_path)
+    signal.signal(signal.SIGINT,r.exit)
+    global start_time
+    start_time = time.time()
+    r.monitor()
 
 if __name__ == '__main__':
     main()
