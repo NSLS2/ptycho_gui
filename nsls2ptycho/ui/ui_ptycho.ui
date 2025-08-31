@@ -39,25 +39,28 @@
             </widget>
            </item>
            <item>
-            <widget class="QLineEdit" name="le_scan_num">
-             <property name="sizePolicy">
-              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-               <horstretch>0</horstretch>
-               <verstretch>0</verstretch>
-              </sizepolicy>
-             </property>
-             <property name="maximumSize">
-              <size>
-               <width>80</width>
-               <height>16777215</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>34784</string>
-             </property>
-            </widget>
-           </item>
-           <item>
+             <widget class="QSpinBox" name="sp_scan_num">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>80</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="minimum">
+               <number>-9999999</number>
+              </property>
+              <property name="maximum">
+               <number>9999999</number>
+              </property>
+             </widget>
+            </item>
+            <item>
             <widget class="QCheckBox" name="ck_extra_scans_flag">
              <property name="toolTip">
               <string>Enable additional scans (ex: dark frames) associated with the scan number on the left.</string>

@@ -60,8 +60,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.ck_extra_scans_flag.clicked.connect(self.updateExtraScansFlg)
         self.btn_set_extra_scans.clicked.connect(self.setExtraScans)
 
-        #self.le_scan_num.editingFinished.connect(self.forceLoad) # too sensitive, why?
-        self.le_scan_num.textChanged.connect(self.forceLoad)
+        self.sp_scan_num.valueChanged.connect(self.forceLoad)
         self.cb_dataloader.currentTextChanged.connect(self.forceLoad)
         self.cb_detectorkind.currentTextChanged.connect(self.forceLoad)
 
@@ -224,7 +223,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p = self.param
 
         # data group
-        p.scan_num = str(self.le_scan_num.text())
+        p.scan_num = str(self.sp_scan_num.value())
         p.detectorkind = str(self.cb_detectorkind.currentText())
         p.frame_num = int(self.sp_fram_num.value())
         # p.working_directory set by setWorkingDirectory()
@@ -352,7 +351,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p = self.param
 
         # Data group
-        self.le_scan_num.setText(p.scan_num)
+        self.sp_scan_num.setValue(p.scan_num)
         self.le_working_directory.setText(str(p.working_directory or ''))
         self.cb_detectorkind.setCurrentIndex(p.get_detector_kind_index())
         self.sp_fram_num.setValue(int(p.frame_num))
@@ -974,7 +973,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             # TODO: is there a way to lock all widgets to prevent accidental parameter changes in the middle?
 
             # fire up
-            self.le_scan_num.textChanged.disconnect(self.forceLoad)
+            try:
+                self.sp_scan_num.valueChanged.disconnect(self.forceLoad)
+            except:
+                pass
             if self.ck_init_prb_batch_flag.isChecked():
                 filename = self.le_prb_path_batch.text()
                 self._batch_prb_filename = filename.split("*")
@@ -991,7 +993,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         Brute-force abortion of the entire batch. No resumption is possible.
         '''
         self._scan_numbers = None
-        self.le_scan_num.textChanged.connect(self.forceLoad)
+        self.sp_scan_num.valueChanged.connect(self.forceLoad)
         self.stop(True)
         if self.roiWindow is not None:
             if self.roiWindow._worker_thread is not None:
@@ -1019,7 +1021,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         if len(self._scan_numbers) > 0:
             scan_num = self._scan_numbers.pop()
             print("[BATCH] begin processing scan " + str(scan_num) + "...")
-            self.le_scan_num.setText(str(scan_num))
+            self.sp_scan_num.setValue(scan_num)
             self.btn_recon_batch_start.setEnabled(False)
             self.btn_recon_batch_stop.setEnabled(True)
 
@@ -1032,7 +1034,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         else:
             print("[BATCH] batch processing complete!")
             self._scan_numbers = None
-            self.le_scan_num.textChanged.connect(self.forceLoad)
+            self.sp_scan_num.valueChanged.connect(self.forceLoad)
             self.resetButtons()
             if self.roiWindow is not None:
                 self.roiWindow = None
@@ -1139,7 +1141,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         if self._mds_table is not None:
             return get_single_image(self._db, frame_num, self._mds_table)
         else:
-            scan_num = int(self.le_scan_num.text())
+            scan_num = self.sp_scan_num.value()
             items = []
             if self._extra_scans_dialog is not None:
                 list_widget = self._extra_scans_dialog.listWidget
@@ -1155,7 +1157,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def _viewDataFrameH5(self, frame_num:int):
         # load the data from the h5 in the working directory
         working_dir = str(self.le_working_directory.text()) # self.param.working_directory
-        scan_num = str(self.le_scan_num.text())
+        scan_num = str(self.sp_scan_num.value())
         length = self.sp_num_points.value()
         if frame_num >= length:
             message = "[ERROR] The {0}-th frame doesn't exist. "
@@ -1185,14 +1187,14 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
 
     def loadExpParam(self):
-        scan_num = self.le_scan_num.text()
+        scan_num = self.sp_scan_num.value()
 
         try:
             if self.cb_dataloader.currentText() == "Load from databroker":
-                self._loadExpParamBroker(int(scan_num))
+                self._loadExpParamBroker(scan_num)
 
             if self.cb_dataloader.currentText() == "Load from h5":
-                self._loadExpParamH5(scan_num)
+                self._loadExpParamH5(str(scan_num))
         except OSError: # for h5
             print("[ERROR] h5 not found. Resetting...", file=sys.stderr, end='')
             self.resetExperimentalParameters()
