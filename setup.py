@@ -23,7 +23,7 @@ from setuptools import setup
 # else:
 #     extensions = cythonize("nsls2ptycho/core/ptycho/*.pyx")
 
-REQUIREMENTS = ['mpi4py', 'pyfftw', 'numpy', 'scipy', 'matplotlib', 'Pillow', 'h5py', 'posix_ipc', 'h5py>=3.9.0']
+REQUIREMENTS = ['mpi4py', 'pyfftw', 'numpy', 'nvtx', 'scipy', 'matplotlib', 'Pillow', 'h5py', 'posix_ipc', 'h5py>=3.9.0']
 
 # see if PyQt5 is already installed --- pip and conda use different names...
 try:
