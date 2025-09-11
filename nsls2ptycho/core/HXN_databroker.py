@@ -421,7 +421,7 @@ def load_metadata(db, scan_num:int, det_name:str):
     else:
         filename = handler._handle.filename
 
-    with h5py.File(filename,'r') as f:
+    with h5py.File(filename,'r',locking=False) as f:
         shape = f['entry/data/data'].shape
         nx = shape[1]
         ny = shape[2]
@@ -608,7 +608,7 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
     # Check for missing detector frames
     try:
         if np.size(raw_data_filename_abs) == 1:
-            with h5py.File(raw_data_filename_abs[0],'r') as hdet:
+            with h5py.File(raw_data_filename_abs[0],'r',locking=False) as hdet:
                 if hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'].size < param.points.shape[1]:
                     print('Detected missing detector frame(s), correcting scan positions and ic...')
                     fid = np.array(hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'])
