@@ -1549,7 +1549,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             message = "[ERROR] The {0}-th frame doesn't exist. "
             message += "Available frames for the chosen scan: [0, {1}]."
             raise ValueError(message.format(frame_num, length-1))
-        with h5py.File(working_dir+'/scan_'+scan_num+'.h5','r') as f:
+        with h5py.File(working_dir+'/scan_'+scan_num+'.h5','r',locking=False) as f:
             if frame_num == -1:
                 self.btn_view_frame.setEnabled(False)
                 print("h5 loaded, calculating the average of all frames...", end='')
@@ -1696,7 +1696,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def _loadExpParamH5(self, scan_num:str):
         # load the parameters from the h5 in the working directory
         working_dir = str(self.le_working_directory.text()) # self.param.working_directory
-        with h5py.File(working_dir+'/scan_'+scan_num+'.h5','r') as f:
+        with h5py.File(working_dir+'/scan_'+scan_num+'.h5','r',locking=False) as f:
             # this code is not robust enough as certain keys may not be present...
             print("h5 loaded, parsing experimental parameters...", end='')
             self.sp_xray_energy.setValue(1.2398/f['lambda_nm'][()])
