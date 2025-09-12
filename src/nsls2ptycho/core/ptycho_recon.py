@@ -361,7 +361,7 @@ class PtychoReconLive(QtCore.QThread):
     def __init__(self, param:Param=None, parent=None):
         super().__init__(parent)
         self.param = param
-        self.config_file = parent._config_path+'%d'%param.gpus[0]
+        self.config_file = parent._config_path
         self.return_value = None
 
     def _parse_message(self, tokens):

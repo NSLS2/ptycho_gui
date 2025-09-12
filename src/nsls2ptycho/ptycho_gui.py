@@ -12,7 +12,7 @@ from .core.ptycho_recon import PtychoReconWorker,PtychoReconRemote, PtychoReconL
 from .core.ptycho_qt_utils import PtychoStream
 from .core.widgets.list_widget import ListWidget
 from .core.widgets.mplcanvas import load_image_pil
-from .core.ptycho.utils import parse_config
+from .core.ptycho.utils import parse_config, save_config
 from ._version import __version__
 
 # databroker related
@@ -86,8 +86,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.btn_recon_stop.clicked.connect(self.stop)
         self.btn_recon_batch_start.clicked.connect(self.batchStart)
         self.btn_recon_batch_stop.clicked.connect(self.batchStop)
-        self.ck_init_prb_batch_flag.stateChanged.connect(self.switchProbeBatch)
-        self.ck_init_obj_batch_flag.stateChanged.connect(self.switchObjectBatch)
 
         self.pb_start_live.clicked.connect(self.start_live)
         self.pb_stop_live.clicked.connect(self.stop_live)
@@ -123,8 +121,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self._prop_dists = None
         self._scan_points = None    # an array of shape (2, N) holding the scan coordinates
         self._extra_scans_dialog = None
-        self._batch_prb_filename = None  # probe's filename template for batch mode
-        self._batch_obj_filename = None  # object's filename template for batch mode
         self._batch_stopped = False
         self._config_path = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_gui_config"
         if not os.path.isdir(os.path.dirname(self._config_path)):
@@ -346,6 +342,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p.use_NCCL             = self.rb_nccl.isChecked()
         p.use_CUDA_MPI         = self.rb_cuda_mpi.isChecked()
 
+        p.batch_items = self.le_batch_items.text()
+
         p.batch_x0 = int(self.sp_batch_x0.value())
         p.batch_y0 = int(self.sp_batch_y0.value())
         p.batch_width = int(self.sp_batch_width.value())
@@ -497,6 +495,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.rb_nccl.setChecked(p.use_NCCL)
         self.rb_cuda_mpi.setChecked(p.use_CUDA_MPI)
 
+        self.le_batch_items.setText(p.batch_items)
         self.sp_batch_x0.setValue(p.batch_x0)
         self.sp_batch_y0.setValue(p.batch_y0)
         self.sp_batch_width.setValue(p.batch_width)
@@ -521,7 +520,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
             # this is needed because MPI processes need to know the working directory...
             if self.param.gpu_flag and len(self.param.gpus) == 1:
-                self._exportConfigHelper(self._config_path+'%d'%self.param.gpus[0])
+                save_config(self._config_path,self.param)
             else:
                 raise NotImplementedError('Live recon on multiple gpus not implemented')
 
@@ -631,34 +630,32 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 return
 
             # batch mode requires some additional changes to param
-            if batch_mode:
-                if self._batch_prb_filename is not None:
-                    p = self.param
-                    p.init_prb_flag = False
-                    scan_num = str(self.param.scan_num)
-                    sign = self._batch_prb_filename[1].split('probe')[0]
-                    sign = sign.strip('_')
-                    dirname = p.working_directory + "/recon_result/S" + scan_num + "/" + sign + "/recon_data/"
-                    filename = scan_num.join(self._batch_prb_filename)
-                    p.set_prb_path(dirname, filename)
-                    print("[BATCH] will load " + dirname + filename + " as probe")
+            # _batch_prb_filename and _batch_obj_filename will be decommissioned
+            # if batch_mode:
+            #     if self._batch_prb_filename is not None:
+            #         p = self.param
+            #         p.init_prb_flag = False
+            #         scan_num = str(self.param.scan_num)
+            #         sign = self._batch_prb_filename[1].split('probe')[0]
+            #         sign = sign.strip('_')
+            #         dirname = p.working_directory + "/recon_result/S" + scan_num + "/" + sign + "/recon_data/"
+            #         filename = scan_num.join(self._batch_prb_filename)
+            #         p.set_prb_path(dirname, filename)
+            #         print("[BATCH] will load " + dirname + filename + " as probe")
 
-                if self._batch_obj_filename is not None:
-                    p = self.param
-                    p.init_obj_flag = False
-                    scan_num = str(self.param.scan_num)
-                    sign = self._batch_obj_filename[1].split('object')[0]
-                    sign = sign.strip('_')
-                    dirname = p.working_directory + "/recon_result/S" + scan_num + "/" + sign + "/recon_data/"
-                    filename = scan_num.join(self._batch_obj_filename)
-                    p.set_obj_path(dirname, filename)
-                    print("[BATCH] will load " + dirname + filename + " as object")
+            #     if self._batch_obj_filename is not None:
+            #         p = self.param
+            #         p.init_obj_flag = False
+            #         scan_num = str(self.param.scan_num)
+            #         sign = self._batch_obj_filename[1].split('object')[0]
+            #         sign = sign.strip('_')
+            #         dirname = p.working_directory + "/recon_result/S" + scan_num + "/" + sign + "/recon_data/"
+            #         filename = scan_num.join(self._batch_obj_filename)
+            #         p.set_obj_path(dirname, filename)
+            #         print("[BATCH] will load " + dirname + filename + " as object")
 
             # this is needed because MPI processes need to know the working directory...
-            if self.param.gpu_flag and len(self.param.gpus) == 1:
-                self._exportConfigHelper(self._config_path+'%d'%self.param.gpus[0])
-            else:
-                self._exportConfigHelper(self._config_path)
+            save_config(self._config_path,self.param)
             # init reconStepWindow
             if self.ck_preview_flag.isChecked():
                 if not self.param.multislice_flag:
@@ -1228,16 +1225,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             # TODO: is there a way to lock all widgets to prevent accidental parameter changes in the middle?
 
             # fire up
-            try:
-                self.sp_scan_num.valueChanged.disconnect(self.forceLoad)
-            except:
-                pass
-            if self.ck_init_prb_batch_flag.isChecked():
-                filename = self.le_prb_path_batch.text()
-                self._batch_prb_filename = filename.split("*")
-            if self.ck_init_obj_batch_flag.isChecked():
-                filename = self.le_obj_path_batch.text()
-                self._batch_obj_filename = filename.split("*")
+            # try:
+            #     self.sp_scan_num.valueChanged.disconnect(self.forceLoad)
+            # except:
+            #     pass
             self._batch_manager() # serve as linked list's head
         except Exception as ex:
             self.exception_handler(ex)
@@ -1247,7 +1238,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         Brute-force abortion of the entire batch. No resumption is possible.
         '''
         self._scan_numbers = None
-        self.sp_scan_num.valueChanged.connect(self.forceLoad)
+        # self.sp_scan_num.valueChanged.connect(self.forceLoad)
         self.stop(True)
         if self.roiWindow is not None:
             # if self.roiWindow._worker_thread is not None:
@@ -1328,7 +1319,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             except:
                 traceback.print_exc()
                 print("Batch couldn't load any scan...")
-                self.sp_scan_num.valueChanged.connect(self.forceLoad)
+                # self.sp_scan_num.valueChanged.connect(self.forceLoad)
                 self.resetButtons()
                 if self.roiWindow is not None:
                     self.roiWindow = None
@@ -1354,18 +1345,34 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         else:
             print("[BATCH] batch processing complete!")
             self._scan_numbers = None
-            self.sp_scan_num.valueChanged.connect(self.forceLoad)
+            # self.sp_scan_num.valueChanged.connect(self.forceLoad)
             self.resetButtons()
             if self.roiWindow is not None:
                 self.roiWindow = None
-    def _batch_crop(self):
-        
-        if self.crop_scan():
 
-            if not self.ck_batch_run_flag.isChecked():
-                self._batch_manager()
+    def _batch_crop(self):
+
+        if self.ck_batch_track.isChecked(): # Scan is ongoing
+            while not self.crop_scan() and not self._batch_stopped:
+                print(f"[BATCH] Scan {str(self.sp_scan_num.value())} cannot be loaded, pausing 5 seconds...")
+                for i in range(10):
+                    time.sleep(0.5)
+                    QtWidgets.QApplication.processEvents()
+            if not self._batch_stopped:
+                if not self.ck_batch_run_flag.isChecked():
+                    self._batch_manager()
+                else:
+                    self._batch_run()
+        else:
+            if self.crop_scan():
+                if not self.ck_batch_run_flag.isChecked():
+                    self._batch_manager()
+                else:
+                    self._batch_run()
             else:
-                self._batch_run()
+                QtWidgets.QApplication.processEvents()
+                self._batch_manager()
+
     
     def crop_scan(self):
         # Crop scan using current parameters and bad pixel file without opening the ROI window
@@ -1375,9 +1382,13 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         self.loadExpParam()
         
+        QtWidgets.QApplication.processEvents()
 
         if self.roiWindow is not None:
             self.roiWindow.close()
+
+        if not self._loaded:
+            return False
         
         #print("ROI:", self.roiWindow.canvas.get_red_roi())
         badpixels = None
@@ -1395,6 +1406,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         # TEST: ROI center
         cx = self.sp_batch_x0.value() + roi_width // 2
         cy = self.sp_batch_y0.value() + roi_height // 2
+
+
+        QtWidgets.QApplication.processEvents()
 
         return self.save_to_h5(roi_width,roi_height,cx,cy,0,badpixels,None,self.sp_batch_upsample.value(),self.ck_save_diff.isChecked())
 
@@ -1445,23 +1459,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         else:
             self.loadExpParam()
             self.start(True)
-
-    def switchProbeBatch(self):
-        if self.ck_init_prb_batch_flag.isChecked():
-            self.le_prb_path_batch.setEnabled(True)
-        else:
-            self.le_prb_path_batch.setEnabled(False)
-            self.le_prb_path_batch.setText('')
-            self._batch_prb_filename = None
-
-
-    def switchObjectBatch(self):
-        if self.ck_init_obj_batch_flag.isChecked():
-            self.le_obj_path_batch.setEnabled(True)
-        else:
-            self.le_obj_path_batch.setEnabled(False)
-            self.le_obj_path_batch.setText('')
-            self._batch_obj_filename = None
 
 
     def viewDataFrame(self):
@@ -1582,6 +1579,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def loadExpParam(self):
         scan_num = self.sp_scan_num.value()
 
+
+        self._loaded = False
         try:
             if self.cb_dataloader.currentText() == "Load from databroker":
                 self._loadExpParamBroker(scan_num)
@@ -1626,10 +1625,12 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         try:
             print("loading from databroker...", end='')
+            QtWidgets.QApplication.processEvents()
             metadata = load_metadata(self.db,scan_id,det_name)
             self._setExpParamBroker(metadata)
         except Exception as err:
-            print(err)
+            self.btn_load_scan.setEnabled(True)
+            raise err
 
         self.btn_load_scan.setEnabled(True)
 
@@ -1787,21 +1788,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         if filename is not None and len(filename) > 0:
             if filename[-4:] != ".txt":
                 filename += ".txt"
-            self._exportConfigHelper(filename)
+            save_config(filename,self.param)
             print("config saved to " + filename)
-
-
-    def _exportConfigHelper(self, filename:str):
-        keys = list(self.param.__dict__.keys())
-        keys.sort()
-        with open(filename, 'w') as f:
-            f.write("[GUI]\n")
-            for key in keys:
-                # skip a few items related to databroker
-                if key == 'points' or key == 'ic' or key == 'mds_table':
-                    continue
-                f.write(key+" = "+str(self.param.__dict__[key])+"\n")
-
 
     def resetExperimentalParameters(self):
         self.sp_xray_energy.setValue(0)
@@ -1862,7 +1850,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             sys.stderr = sys.__stderr__
             if self.menu_save_config_history.isChecked():
                 self.update_param_from_gui()
-                self._exportConfigHelper(self._config_path)
+                save_config(self._config_path,self.param)
                 #print("config file was written to " + self._config_path)
             self.close_mmap()
         except:

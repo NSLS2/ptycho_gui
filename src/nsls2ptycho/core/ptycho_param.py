@@ -161,6 +161,7 @@ class Param(object):
         self.save_tmp_pic_flag = False
         #self.p_flag = False          # True to load an exsiting probe
 
+        self.batch_items = ""
         self.batch_x0 = 0
         self.batch_y0 = 0
         self.batch_width = 0
