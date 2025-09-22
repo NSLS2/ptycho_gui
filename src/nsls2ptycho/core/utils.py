@@ -113,7 +113,7 @@ def use_mpi_machinefile(mpirun_command, mpi_file_path):
 
 def set_flush_early(mpirun_command):
     if 'MPICH' in MPI.get_vendor()[0] or 'MVAPICH' in MPI.get_vendor()[0]:
-        mpirun_command.insert(-2, "-u") # force flush asap (MPICH is weird...)
+        mpirun_command.insert(4, "-u") # force flush asap (MPICH is weird...)
     return mpirun_command
 
 def parse_range2(batch_items, batch_processing = True):

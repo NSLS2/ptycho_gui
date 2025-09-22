@@ -5,12 +5,16 @@ from fcntl import fcntl, F_GETFL, F_SETFL
 from os import O_NONBLOCK
 import traceback
 import numpy as np
+import time
 
 # for frontend-backend communication
 from posix_ipc import SharedMemory, ExistentialError
 import mmap
 
-class recon_worker:
+wait_timeout = 30
+start_time = 0
+
+class recon_worker_slurm:
     def exit(self,sig,frame):
         print('Ctrl+C!')
         self.msg_export('[Working]Aborting...')
@@ -20,10 +24,8 @@ class recon_worker:
         self.abort_recon()
         sys.exit(0)
     
-    def __init__(self,work_path):
-        self.work_path = work_path
-        self.srv_name = socket.gethostname().split('.')[0]
-        self.monitor_path = os.path.join(os.path.abspath(self.work_path),'remote_'+self.srv_name)
+    def __init__(self,config_path):
+        self.monitor_path = config_path
         self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'))
         self.fname = None
         self.fname_full = None
@@ -44,15 +46,12 @@ class recon_worker:
         nx_obj = int.from_bytes(self.mm_list[0].read(8), byteorder='big')
         ny_obj = int.from_bytes(self.mm_list[0].read(8), byteorder='big') # the file position has been moved by 8 bytes when we get nx_obj
 
-        if p.mode_flag:
+        if not p.multislice_flag:
             self._prb = np.ndarray(shape=(p.n_iterations, p.prb_mode_num, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
             self._obj = np.ndarray(shape=(p.n_iterations, p.obj_mode_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
-        elif p.multislice_flag:
-            self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
         else:
             self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
-            self._obj = np.ndarray(shape=(p.n_iterations, 1, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
+            self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
     
     def close_mmap(self):
         # We close shared memory as long as the backend is terminated either normally or 
@@ -66,14 +65,14 @@ class recon_worker:
                 shm.unlink()
             self.mm_list = []
             self.shm_list = []
-        except NameError:
+        except:
             # either not using GUI, monitor is turned off, global variables are deleted or not yet created!
             # need to examine the last case
             try:
                 SharedMemory("/"+self.p.shm_name+"_obj_size").unlink()
                 SharedMemory("/"+self.p.shm_name+"_prb").unlink()
                 SharedMemory("/"+self.p.shm_name+"_obj").unlink()
-            except ExistentialError:
+            except:
                 pass # nothing to clean up, we're done
 
     def msg_export(self,msg):
@@ -84,25 +83,32 @@ class recon_worker:
                     pass
             with open(self.msg_file,'a') as f:
                 f.write(msg+'\n')
+    def cleanup(self):
+        self.close_mmap()
+        if self.fname_full and os.path.exists(self.fname_full):
+            os.remove(self.fname_full)
+            self.fname_full = None
+        if os.path.exists(os.path.join(self.monitor_path,'prb_live.npy')):
+            os.remove(os.path.join(self.monitor_path,'prb_live.npy'))
+        if os.path.exists(os.path.join(self.monitor_path,'obj_live.npy')):
+            os.remove(os.path.join(self.monitor_path,'obj_live.npy'))
 
+        
     def abort_recon(self):
         if self.process:
             self.process.terminate()
             self.process.wait()
             self.process = None
         self.msg_export('[Worker]Recon aborted')
-        if self.fname_full:
-            os.remove(self.fname_full)
-            self.fname_full = None
+        self.cleanup()
 
     def complete_recon(self):
         if self.fname_full:
             self.msg_export('[Worker]Recon done for '+self.fname)
-            os.remove(self.fname_full)
+            self.cleanup()
             # Clear msg file
             with open(self.msg_file,'w') as f:
                 pass
-            self.fname_full = None
 
     def recon(self):
         self.msg_export('[Worker]Start reconstructing '+self.fname)
@@ -196,14 +202,18 @@ class recon_worker:
 
 
     def monitor(self):
+        global start_time
         print('Ptycho worker started monitoring path '+self.monitor_path)
-        while True:
+        job_done = False
+        while not job_done and (time.time() - start_time)<wait_timeout:
             if not os.path.isdir(self.monitor_path):
-                print('Waiting for monitored path to be created...')
+                print(f'Waiting for monitored path {self.monitor_path} to be created...')
+                time.sleep(3)
             else:
                 flist = [f for f in os.listdir(self.monitor_path) if f.startswith('ptycho')]
                 if not flist:
                     self.msg_export("[Worker]Recon folder is empty, waiting for task...")
+                    time.sleep(3)
                 for fname in flist:
                     print('Loading jobfile '+fname)
                     with open(os.path.join(self.monitor_path,fname,),'r') as f:
@@ -214,9 +224,24 @@ class recon_worker:
                     else:
                         print(__loader__.name)
                         self.msg_export('[Warning]Another session of ptycho worker is running on this server or the previous worker didn\'t exit normally')
-            time.sleep(3)
+                    job_done = True
+
+def main():
+    if not 'SLURM_PROCID' in os.environ or os.environ['SLURM_PROCID'] != '0':
+        return
+    if len(sys.argv) == 1: # started without argument
+        # parse the config file in home folder
+        config_path = os.path.expanduser("~") + "/.ptycho_gui/remote_task/"
+    elif len(sys.argv) == 2: # started from commandline: python recon_ptycho_gui.py input_file
+        config_path = sys.argv[1]
+    else:
+        raise Exception("action not allowed, abort")
+    
+    r = recon_worker_slurm(config_path)
+    signal.signal(signal.SIGINT,r.exit)
+    global start_time
+    start_time = time.time()
+    r.monitor()
 
 if __name__ == '__main__':
-    r = recon_worker('.')
-    signal.signal(signal.SIGINT,r.exit)
-    r.monitor()
+    main()

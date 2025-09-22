@@ -33,7 +33,7 @@ class Param(object):
         # organized by grouping in GUI
 
         ### [Data] ###
-        self.scan_num = '34784'       # scan number
+        self.scan_num = 0       # scan number
         self.working_directory = get_working_directory()
         self.detectorkind = ''        # used to be chosen from ['merlin1', 'merlin2', 'timepix1', 'timepix2']
         self.frame_num = 0            # frame number to check
@@ -68,7 +68,6 @@ class Param(object):
         self.obj_dir = ''
         self.obj_path = None         # path to existing object array (.npy)
 
-        self.mode_flag = False       # do multi-mode reconstruction
         self.afly_flag = False
         self.afly_probes = 0
         self.prb_mode_num = 5
@@ -103,7 +102,6 @@ class Param(object):
         self.start_update_object = 0
         self.ml_mode = 'Poisson'     # mode for ML
         self.ml_weight = 0.1
-        self.dm_version = 2
         self.cal_scan_pattern_flag = False
 
         self.nth = 5                 # number of points in the first ring
@@ -163,6 +161,7 @@ class Param(object):
         self.save_tmp_pic_flag = False
         #self.p_flag = False          # True to load an exsiting probe
 
+        self.batch_items = ""
         self.batch_x0 = 0
         self.batch_y0 = 0
         self.batch_width = 0

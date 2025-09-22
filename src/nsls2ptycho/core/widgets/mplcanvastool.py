@@ -194,7 +194,7 @@ class MplCanvasTool(QtWidgets.QWidget):
         self._eventHandler.roi_changed.disconnect(self._update_roi)
 
         for sp in self._roi_all:
-            sp.setValue(0.)
+            sp.setValue(0)
 
         self._eventHandler.ref_rect = None
         self._eventHandler.ref_idx = -1
@@ -255,7 +255,7 @@ class MplCanvasTool(QtWidgets.QWidget):
 
     def reset(self):
         for sp in self._roi_all:
-            sp.setValue(0.)
+            sp.setValue(0)
         self.image = None
         self.image_data = None
         self.image_handler = None

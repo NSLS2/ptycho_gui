@@ -29,7 +29,8 @@ def _load_HXN():
     get_single_image = hxn_databroker.get_single_image
     get_detector_names = hxn_databroker.get_detector_names
     db = hxn_databroker.hxn_db
-    print("HXN's Databroker is enabled.", file=sys.stderr)
+    if db is not None:
+        print("HXN's Databroker is enabled.", file=sys.stderr)
 
 
 def _load_CSX():
@@ -40,7 +41,8 @@ def _load_CSX():
     get_single_image = csx_databroker.get_single_image
     get_detector_names = csx_databroker.get_detector_names
     db = csx_databroker.csx_db
-    print("CSX's Databroker is enabled.", file=sys.stderr)
+    if db is not None:
+        print("CSX's Databroker is enabled.", file=sys.stderr)
 
 
 try:
@@ -55,6 +57,11 @@ try:
         with open(config_path, 'r') as f:
             beamline_config = json.load(f)
             beamline_name = beamline_config['beamline_name']
+    elif 'BEAMLINE_ACRONYM' in os.environ:
+        if os.environ['BEAMLINE_ACRONYM'] == 'HXN':
+            beamline_name = 'HXN'
+        elif os.environ['BEAMLINE_ACRONYM'] == 'CSX':
+            beamline_name = 'CSX'
     else:
         beamline_name = None
 

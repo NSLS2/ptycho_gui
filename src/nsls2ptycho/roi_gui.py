@@ -55,6 +55,12 @@ class RoiWindow(QtWidgets.QMainWindow, ui_roi.Ui_MainWindow):
         self.cy = None
         self.sp_threshold.setValue(0.0)
 
+    def set_image(self,image,main_window):
+        if image is not None:
+            roi = [main_window.sp_batch_x0.value(),main_window.sp_batch_y0.value(),main_window.sp_batch_width.value(),main_window.sp_batch_height.value()]
+            self.canvas.draw_image(image, cmap='gray', init_roi=roi, use_log=False)
+
+
     def reset_window(self):
         # When this function is called, self.canvas._on_reset() is also called
 

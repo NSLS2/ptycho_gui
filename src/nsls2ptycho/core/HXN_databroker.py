@@ -1,5 +1,5 @@
 from databroker.v0 import Broker
-from . import CompositeBroker
+# from . import CompositeBroker
 from databroker.headersource.mongo import MDS
 import numpy as np
 import sys, os, warnings, pandas
@@ -14,11 +14,18 @@ except ModuleNotFoundError:
 from .scan_info import ScanInfo
 try:
     # new mongo database
-    hxn_db = CompositeBroker.db
+    # hxn_db = CompositeBroker.db
     #register(hxn_db)
-except FileNotFoundError:
-    print("hxn.yml not found. Unable to access HXN's database.", file=sys.stderr)
+    from hxntools.CompositeBroker import db
+    hxn_db = db
+except:
+    print("Unable to access HXN's database, loading from pre-saved h5 files only.", file=sys.stderr)
     hxn_db = None
+
+try:
+    from hxntools.motor_info import motor_table
+except:
+    motor_table = None
 
 
 # ***************************** "Public API" *****************************
@@ -154,40 +161,31 @@ def load_metadata(db, scan_num:int, det_name:str):
         points[1] = np.array(df[scan_motors[1]])
 
         # get angle, ic
-        if scan_motors[1] == 'ssy':
+        if scan_motors[0].startswith('ss'):
             angle = 0#bl.zpsth[1]
-            ic = np.asfarray(df['sclr1_ch3'])
-        elif scan_motors[1] == 'zpssy':
-            if 'tomo_angle_offset'in header.start:
-                angle_offset = header.start['tomo_angle_offset']
-            else:
-                angle_offset = -0.2
-            if 'x_scale_factor'in header.start:
-                x_scale_factor = header.start['x_scale_factor']
-            else:
-                x_scale_factor = 0.9542
-            if 'z_scale_factor'in header.start:
-                z_scale_factor = header.start['z_scale_factor']
-            else:
-                z_scale_factor = 1.0309
-            angle = bl.zpsth[1] - angle_offset
-            if scan_motors[0] == 'zpssx':
-                points[0] = points[0] * x_scale_factor
-                dr_x *= x_scale_factor
-            elif scan_motors[0] == 'zpssz':
-                points[0] = points[0] * z_scale_factor
-                dr_x *= z_scale_factor
-            ic = np.asfarray(df['sclr1_ch4'])
+            try:
+                ic = np.asfarray(df['sclr1_ch3'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
+        elif scan_motors[0].startswith('zpss'):
+            angle = bl.zpsth[1]
+            try:
+                ic = np.asfarray(df['sclr1_ch4'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
         else:
             angle = bl.dsth[1]
-            ic = np.asfarray(df['sclr1_ch4'])
+            try:
+                ic = np.asfarray(df['sclr1_ch4'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
         array_ensure_positive_elements(ic, name="scaler")
 
         if 'merlin2' in header.start['detectors']:
             # get ccd_pixel_um
             ccd_pixel_um = 55.
 
-            z_m = 0.5
+            z_m = 1.467
         elif 'eiger1' in header.start['detectors']:
             ccd_pixel_um = 75.
 
@@ -210,9 +208,20 @@ def load_metadata(db, scan_num:int, det_name:str):
             scan_type = header.start['plan_name']
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
-            if header.start['plan_name'].startswith('pt'):
-                items = [det_name, 'sclr3_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
-                ic_chan = 'sclr3_ch4'
+            if header.start['plan_name'].startswith('pt') or header.start['plan_name'].startswith('rasmi'):
+                if 'sclr1' in scan_doc['detectors']:
+                    # Sclr1 used
+                    items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = 'sclr1_ch3'
+                elif 'sclr3' in scan_doc['detectors']:  
+                    # Sclr3 used              
+                    items = [det_name, 'sclr3_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = 'sclr3_ch4'
+                else:
+                    # Ignore scaler
+                    items = [det_name, 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = None
+
             else:
                 items = [det_name, 'sclr1_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                 ic_chan = 'sclr1_ch4'
@@ -303,8 +312,9 @@ def load_metadata(db, scan_num:int, det_name:str):
                         angle = 0
                 except:
                     angle = 0
-            ic = np.zeros(num_frame)
-            ic[:] = np.resize(db.reg.retrieve(df[ic_chan].iat[0]),num_frame)
+            ic = np.ones(num_frame)
+            if ic_chan:
+                ic[:] = np.resize(db.reg.retrieve(df[ic_chan].iat[0]),num_frame)
             array_ensure_positive_elements(ic, name="scaler")
 
             # get ccd_pixel_um
@@ -398,13 +408,20 @@ def load_metadata(db, scan_num:int, det_name:str):
             # img = db.reg.retrieve(mds_table.iat[0])[0]
             # nx, ny = img.shape # can also give a ValueError; TODO: come up a better way!
 
+    # Correct for motor scaling
+    if motor_table:
+        if scan_motors[0] in motor_table:
+            dr_x *= np.abs(motor_table[scan_motors[0]][1]*1.e4)
+        if scan_motors[1] in motor_table:
+            dr_y *= np.abs(motor_table[scan_motors[1]][1]*1.e4)
+
     handler = db.reg.get_spec_handler(mds_table.iat[0].split('/')[0])
     if hasattr(handler,'_filename'):
         filename = handler._filename
     else:
         filename = handler._handle.filename
 
-    with h5py.File(filename,'r') as f:
+    with h5py.File(filename,'r',locking=False) as f:
         shape = f['entry/data/data'].shape
         nx = shape[1]
         ny = shape[2]
@@ -580,6 +597,7 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
                 raw_data_frame_counts.append(1)
             else:
                 raw_data_frame_counts[-1] += 1
+
         raw_data_filename_abs = [os.path.realpath(filename) for filename in raw_data_filename]
 
         raw_data_roi = np.array([[cy-nn//2,cy+nn//2],[cx-n//2,cx+n//2]])        
@@ -587,6 +605,18 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
         if bad_pixels is None:
             bad_pixels = []
 
+    # Check for missing detector frames
+    try:
+        if np.size(raw_data_filename_abs) == 1:
+            with h5py.File(raw_data_filename_abs[0],'r',locking=False) as hdet:
+                if hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'].size < param.points.shape[1]:
+                    print('Detected missing detector frame(s), correcting scan positions and ic...')
+                    fid = np.array(hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'])
+                    ic = ic[fid]
+                    param.points = param.points[:,fid]
+    except Exception as err:
+        print(err)
+        pass
 
     # create a folder
     try:
@@ -655,8 +685,12 @@ def get_single_image(db, frame_num, mds_table):
         for i in range(1,length):
             img_raw[i] = db.reg.retrieve(mds_table.iat[i])[0]
     else:
+        print(frame_num)
         img_raw = db.reg.retrieve(mds_table.iat[frame_num])
-    overflow_value = np.iinfo(img_raw.dtype).max
+    try:
+        overflow_value = np.iinfo(img_raw.dtype).max
+    except:
+        overflow_value = 1e10
     img = np.mean(img_raw,axis=0)
     return img,overflow_value
 

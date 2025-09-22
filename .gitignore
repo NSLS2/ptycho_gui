@@ -2,6 +2,7 @@ __pycache__
 *.cubin
 *.nvprof
 *.pyc
+*.npy
 
 .idea
 .vscode
