@@ -1,6 +1,8 @@
-[submodule "nsls2ptycho/core/ptycho"]
-	path = nsls2ptycho/core/ptycho
-	url = git@github.com:NSLS-II/ptycho.git
 [submodule "holoscan-framework"]
 	path = holoscan-framework
 	url = git@github.com:skarakuzu/holoscan-framework.git
+	branch = main
+[submodule "nsls2ptycho/core/ptycho"]
+	path = nsls2ptycho/core/ptycho
+	url = git@github.com:NSLS-II/ptycho.git
+	branch = HXN_production
