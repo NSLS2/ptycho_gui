@@ -3,7 +3,7 @@ import numpy as np
 import sys, os
 import h5py
 try:
-    from nsls2ptycho.core.widgets.imgTools import rm_outlier_pixels
+    from .widgets.imgTools import rm_outlier_pixels
 except ModuleNotFoundError:
     # for test purpose
     from widgets.imgTools import rm_outlier_pixels
@@ -126,7 +126,7 @@ def load_metadata(db, scan_num:int, det_name:str=''):
     return metadata
 
 
-def save_data(db, param, scan_num:int, nx_prb:int, ny_prb:int, cx:int, cy:int, threshold=2., bad_pixels=None, zero_out=None):
+def save_data(db, param, scan_num:int, nx_prb:int, ny_prb:int, cx:int, cy:int, threshold=2., bad_pixels=None, zero_out=None, upsample=1):
     '''
     Save metadata and diffamp for the given scan number to a HDF5 file.
 
@@ -151,6 +151,8 @@ def save_data(db, param, scan_num:int, nx_prb:int, ny_prb:int, cx:int, cy:int, t
             the data structure is [[x1, x2, ...], [y1, y2, ...]]. If given, they will be removed from the images.
         - zero_out: list of tuples, optional
             zero out the given rois [(x0, y0, w0, h0), (x1, y1, w1, h1), ...]
+        - upsample: detector upsampling ratio, optional
+            positive integer
 
     Notes:
         1. the detector distance is assumed existent as param.z_m
@@ -160,7 +162,7 @@ def save_data(db, param, scan_num:int, nx_prb:int, ny_prb:int, cx:int, cy:int, t
         bad_pixels = None
 
     det_distance_m = param.z_m
-    det_pixel_um = param.ccd_pixel_um
+    det_pixel_um = param.ccd_pixel_um / upsample
     num_frame = param.nz
     angle = param.angle
     lambda_nm = param.lambda_nm
@@ -196,6 +198,8 @@ def save_data(db, param, scan_num:int, nx_prb:int, ny_prb:int, cx:int, cy:int, t
     diffamp = np.sqrt(diffamp)
     diffamp[diffamp < threshold] = 0.
     assert diffamp.shape == (num_frame, nx_prb, ny_prb)
+    if upsample > 1:
+        diffamp = np.kron(diffamp,np.ones((1,upsample,upsample)))
     print('array size:', diffamp.shape)
 
     # create a folder

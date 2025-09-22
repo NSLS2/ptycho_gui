@@ -1,5 +1,6 @@
 import numpy as np
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Circle
+from matplotlib import pyplot as plt
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -18,7 +19,7 @@ class EventHandler(QObject):
     coord_changed = pyqtSignal(int, int, name='coordChanged')
 
     # signal for brushed pixels ==> (x, y)
-    brush_changed = pyqtSignal(tuple, name='brushChanged')
+    brush_changed = pyqtSignal(tuple, bool, name='brushChanged')
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -43,6 +44,8 @@ class EventHandler(QObject):
         self.ref_idx = -1         # index of currently selected roi
         self.all_rect = []        # list of roi
 
+        self.cross = None
+
         # variable for picking pixels (brush by mouse pointer)
         self.pixel_visited = None
         self.on_brush = False
@@ -51,12 +54,12 @@ class EventHandler(QObject):
     # coord related -- common actionc for all
     def emit_coord(self, event):
         if event.xdata is None or event.ydata is None: return
-        ix = np.int(np.floor(event.xdata + 0.5))
-        iy = np.int(np.floor(event.ydata + 0.5))
+        ix = int(np.floor(event.xdata + 0.5))
+        iy = int(np.floor(event.ydata + 0.5))
         self.coord_changed.emit(ix, iy)
 
-    def emit_brush(self, item):
-        self.brush_changed.emit(item)
+    def emit_brush(self, item, onoff):
+        self.brush_changed.emit(item, onoff)
 
     def emit_roi(self, rect):
         if rect is None:
@@ -74,10 +77,10 @@ class EventHandler(QObject):
                 y0 = y0 + height
                 height = -height
 
-            x0 = np.int(np.floor(x0 + 0.5))
-            y0 = np.int(np.floor(y0 + 0.5))
-            width = np.int(np.round(width))
-            height = np.int(np.round(height))
+            x0 = int(np.floor(x0 + 0.5))
+            y0 = int(np.floor(y0 + 0.5))
+            width = int(np.round(width))
+            height = int(np.round(height))
 
             self.roi_changed.emit(x0, y0, width, height)
 
@@ -116,6 +119,9 @@ class EventHandler(QObject):
             rect = Rectangle(xy, width, height, linewidth=1, linestyle='dashed',
                              edgecolor=RED_EDGECOLOR, facecolor='none')
             ax.add_patch(rect)
+            if self.cross is not None:
+                self.cross.remove()
+            self.cross = ax.scatter(xy[0]+width/2,xy[1]+height/2,s=50, color=rect.get_edgecolor(), marker='x')
             self.all_rect.append(rect)
             self.ref_rect = rect
             self.ref_idx = len(self.all_rect) - 1
@@ -123,11 +129,14 @@ class EventHandler(QObject):
             self.ref_rect.set_xy(xy)
             self.ref_rect.set_width(width)
             self.ref_rect.set_height(height)
+            if self.cross is not None:
+                self.cross.remove()
+            self.cross = ax.scatter(xy[0]+width/2,xy[1]+height/2,s=50, color=self.ref_rect.get_edgecolor(), marker='x')
 
         ax.figure.canvas.draw()
 
-    def _find_closest_rect(self, x, y, delta=10.):
-        min_dist = 9999999.
+    def _find_closest_rect(self, x, y, delta=5.):
+        min_dist = 5.
         ref_rect = None
         ref_idx = -1
         for idx, rect in enumerate(self.all_rect):
@@ -141,12 +150,10 @@ class EventHandler(QObject):
             _y1 = _y0 + height
 
             # check if the mouse pointer is around edges of this rect
-            in_up_bound = _x0 - delta <= x <= _x0 + delta
-            in_lo_bound = _x1 - delta <= x <= _x1 + delta
-            in_l_bound  = _y0 - delta <= y <= _y0 + delta
-            in_r_bound  = _y1 - delta <= y <= _y1 + delta
+            in_x_bound = _x0 - delta <= x <= _x1 + delta
+            in_y_bound = _y0 - delta <= y <= _y1 + delta
 
-            if in_up_bound or in_lo_bound or in_l_bound or in_r_bound:
+            if in_x_bound and in_y_bound:
                 dist = np.min(np.abs([_x0 - x, _x1 - x, _y0 - y, _y1 - y]))
                 if dist < min_dist:
                     min_dist = dist
@@ -245,11 +252,38 @@ class EventHandler(QObject):
                     rect.set_linestyle('solid')
             # left click, select an existing roi
             elif event.button == 1 and ref_rect is not None and ref_idx >= 0:
-                if event.dblclick:
-                    clr = RED_EDGECOLOR
-                    if self.ref_rect.get_edgecolor() == RED_EDGECOLOR:
-                        clr = BLUE_EDGECOLOR
-                    self.ref_rect.set_edgecolor(clr)
+                if event.dblclick: # Remove ROI
+                    self.ref_rect = ref_rect
+                    self.ref_idx = ref_idx
+                    self.ref_rect.remove()
+                    try:
+                        del self.all_rect[self.ref_idx]
+                    except IndexError as ex:
+                        print('[!] ROI index out of range, ignore delete event')
+                    self.ref_rect = None
+                    self.ref_idx = -1
+
+                    # make solid line for all existing roi
+                    for rect in self.all_rect: rect.set_linestyle('solid')
+
+                    if len(self.all_rect):
+                        self.ref_rect = self.all_rect[-1]
+                        self.ref_idx = len(self.all_rect) - 1
+                        self.ref_rect.set_linestyle('dashed')
+                        
+                        x0, y0 = self.ref_rect.get_xy()
+                        width = self.ref_rect.get_width()
+                        height = self.ref_rect.get_height()
+
+                        if self.cross is not None:
+                            self.cross.remove()
+                        self.cross = ax.scatter(x0+width/2,y0+height/2,s=50, color=self.ref_rect.get_edgecolor(), marker='x')
+                    else:
+                        if self.cross is not None:
+                            self.cross.remove()
+                        self.cross = None
+                    self.emit_roi(self.ref_rect)
+
                 else:
                     self.ref_rect = ref_rect
                     self.ref_idx = ref_idx
@@ -259,18 +293,36 @@ class EventHandler(QObject):
                     # make solid line for all existing roi except the selected one
                     for rect in self.all_rect: rect.set_linestyle('solid')
                     self.ref_rect.set_linestyle('dashed')
-            # right click, delete the selected roi
-            elif event.button == 3 and ref_rect is not None and ref_idx >=0:
-                self.ref_rect = ref_rect
-                self.ref_idx = ref_idx
 
-                # make solid line for all existing roi except the selected one
-                for rect in self.all_rect: rect.set_linestyle('solid')
-                self.ref_rect.set_linestyle('dashed')
+                    x0, y0 = self.ref_rect.get_xy()
+                    width = self.ref_rect.get_width()
+                    height = self.ref_rect.get_height()
+
+                    if self.cross is not None:
+                        self.cross.remove()
+                    self.cross = ax.scatter(x0+width/2,y0+height/2,s=50, color=self.ref_rect.get_edgecolor(), marker='x')
+                ax.figure.canvas.draw()
+
+
+            # right click, create blue roi
+            elif event.button == 3:
+                self.rect_x0 = event.xdata
+                self.rect_y0 = event.ydata
+
+                # make solid line for all existing roi
+                for rect in self.all_rect:
+                    rect.set_linestyle('solid')
 
         def on_release(event):
             # event end for initializing new roi
             if event.button == 1 and self.tmp_rect is not None:
+                self.all_rect.append(self.tmp_rect)
+                self.ref_rect = self.tmp_rect
+                self.tmp_rect = None
+                self.rect_x0 = None
+                self.rect_y0 = None
+
+            if event.button == 3 and self.tmp_rect is not None:
                 self.all_rect.append(self.tmp_rect)
                 self.ref_rect = self.tmp_rect
                 self.tmp_rect = None
@@ -282,21 +334,6 @@ class EventHandler(QObject):
                     and self.rect_x0 is None and self.rect_y0 is None:
                 self.rect_tx = None
                 self.rect_ty = None
-                self.emit_roi(self.ref_rect)
-
-            # event end for deleting a roi
-            elif event.button == 3 and self.ref_rect is not None and self.ref_idx >= 0:
-                self.ref_rect.remove()
-                try:
-                    del self.all_rect[self.ref_idx]
-                except IndexError as ex:
-                    print('[!] ROI index out of range, ignore delete event')
-                self.ref_rect = None
-                self.ref_idx = -1
-                if len(self.all_rect):
-                    self.ref_rect = self.all_rect[-1]
-                    self.ref_idx = len(self.all_rect) - 1
-                    self.ref_rect.set_linestyle('dashed')
                 self.emit_roi(self.ref_rect)
 
             ax.figure.canvas.draw()
@@ -312,22 +349,31 @@ class EventHandler(QObject):
                     self.rect_x1 = self.coord_x_ratio * event.x
                     self.rect_y1 = ax.get_ylim()[0] - self.coord_y_ratio * event.y
 
-                # on motion event for drawing new roi
+                # on motion event for drawing new red roi
                 if self.rect_x0 is not None and self.rect_y0 is not None:
 
                     self.rect_x1 = np.clip(self.rect_x1, ax.get_xlim()[0] + 0.5, ax.get_xlim()[1] - 0.5)
                     self.rect_y1 = np.clip(self.rect_y1, ax.get_ylim()[1] + 0.5, ax.get_ylim()[0] - 0.5)
 
-                    width = self.rect_x1 - self.rect_x0
-                    height = self.rect_y1 - self.rect_y0
+                    width = np.abs(self.rect_x1 - self.rect_x0)
+                    height = np.abs(self.rect_y1 - self.rect_y0)
                     if self.tmp_rect is None:
-                        self.tmp_rect = Rectangle((self.rect_x0, self.rect_y0), width, height,
+                        self.tmp_rect = Rectangle((np.minimum(self.rect_x0,self.rect_x1), np.minimum(self.rect_y0,self.rect_y1)), width, height,
                                                   linewidth=1, linestyle='dashed',
                                                   facecolor='none', edgecolor=RED_EDGECOLOR)
                         ax.add_patch(self.tmp_rect)
+                        if self.cross is not None:
+                            self.cross.remove()
+                        self.cross = ax.scatter(np.minimum(self.rect_x0,self.rect_x1)+width/2,np.minimum(self.rect_y0,self.rect_y1)+height/2,s=50, color=self.tmp_rect.get_edgecolor(), marker='x')
                     else:
+                        self.tmp_rect.set_x(np.minimum(self.rect_x0,self.rect_x1))
+                        self.tmp_rect.set_y(np.minimum(self.rect_y0,self.rect_y1))
                         self.tmp_rect.set_width(width)
                         self.tmp_rect.set_height(height)
+
+                        if self.cross is not None:
+                            self.cross.remove()
+                        self.cross = ax.scatter(np.minimum(self.rect_x0,self.rect_x1)+width/2,np.minimum(self.rect_y0,self.rect_y1)+height/2,s=50, color=self.tmp_rect.get_edgecolor(), marker='x')
 
                     self.emit_roi(self.tmp_rect)
                     ax.figure.canvas.draw()
@@ -354,11 +400,53 @@ class EventHandler(QObject):
                         self.ref_rect.set_xy((x0, y0))
                         self.ref_rect.set_width(x1 - x0)
                         self.ref_rect.set_height(y1 - y0)
+                        if self.cross is not None:
+                            self.cross.remove()
+                        self.cross = ax.scatter((x0+x1)/2,(y0+y1)/2,s=50, color=self.ref_rect.get_edgecolor(), marker='x')
                         self.emit_roi(self.ref_rect)
                         ax.figure.canvas.draw()
 
                     self.rect_tx = self.rect_x1
                     self.rect_ty = self.rect_y1
+            elif event.button == 3:
+                if ax.in_axes(event):
+                    self.rect_x1 = event.xdata
+                    self.rect_y1 = event.ydata
+                else:
+                    self.rect_x1 = self.coord_x_ratio * event.x
+                    self.rect_y1 = ax.get_ylim()[0] - self.coord_y_ratio * event.y
+
+                # on motion event for drawing new blue roi
+                if self.rect_x0 is not None and self.rect_y0 is not None:
+
+                    self.rect_x1 = np.clip(self.rect_x1, ax.get_xlim()[0] + 0.5, ax.get_xlim()[1] - 0.5)
+                    self.rect_y1 = np.clip(self.rect_y1, ax.get_ylim()[1] + 0.5, ax.get_ylim()[0] - 0.5)
+
+                    width = np.abs(self.rect_x1 - self.rect_x0)
+                    height = np.abs(self.rect_y1 - self.rect_y0)
+                    if self.tmp_rect is None:
+                        self.tmp_rect = Rectangle((np.minimum(self.rect_x0,self.rect_x1), np.minimum(self.rect_y0,self.rect_y1)), width, height,
+                                                  linewidth=1, linestyle='dashed',
+                                                  facecolor='none', edgecolor=BLUE_EDGECOLOR)
+                        ax.add_patch(self.tmp_rect)
+                        if self.cross is not None:
+                            self.cross.remove()
+                        self.cross = ax.scatter(np.minimum(self.rect_x0,self.rect_x1)+width/2,np.minimum(self.rect_y0,self.rect_y1)+height/2,s=50, color=self.tmp_rect.get_edgecolor(), marker='x')
+
+                    else:
+                        self.tmp_rect.set_x(np.minimum(self.rect_x0,self.rect_x1))
+                        self.tmp_rect.set_y(np.minimum(self.rect_y0,self.rect_y1))
+                        self.tmp_rect.set_width(width)
+                        self.tmp_rect.set_height(height)
+
+                        if self.cross is not None:
+                            self.cross.remove()
+                        self.cross = ax.scatter(np.minimum(self.rect_x0,self.rect_x1)+width/2,np.minimum(self.rect_y0,self.rect_y1)+height/2,s=50, color=self.tmp_rect.get_edgecolor(), marker='x')
+
+                    self.emit_roi(self.tmp_rect)
+                    ax.figure.canvas.draw()
+
+
 
         fig = ax.get_figure()
         id1 = fig.canvas.mpl_connect('button_press_event', on_press)
@@ -370,8 +458,8 @@ class EventHandler(QObject):
     # create monitor handler
     def brush_factory(self, ax):
         def _make_pixel_item(x, y):
-            _x = np.int(np.floor(x + 0.5))
-            _y = np.int(np.floor(y + 0.5))
+            _x = int(np.floor(x + 0.5))
+            _y = int(np.floor(y + 0.5))
             _str = '{:d},{:d}'.format(_x, _y)
             return _str, (_x, _y)
 
@@ -380,12 +468,18 @@ class EventHandler(QObject):
 
             if event.button == 1:
                 key, item = _make_pixel_item(event.xdata, event.ydata)
-                self.emit_brush(item)
+                self.emit_brush(item,True)
                 self.on_brush = True
-                self.pixel_visited = key
+                #self.pixel_visited = key
+            
+            if event.button == 3:
+                key, item = _make_pixel_item(event.xdata, event.ydata)
+                self.emit_brush(item,False)
+                self.on_brush = True
+                #self.pixel_visited = key
 
         def on_release(event):
-            if event.button == 1 and self.on_brush:
+            if (event.button == 1  or event.button == 3) and self.on_brush:
                 self.on_brush = False
 
         def on_motion(event):
@@ -394,9 +488,11 @@ class EventHandler(QObject):
 
             if self.on_brush:
                 key, item = _make_pixel_item(event.xdata, event.ydata)
-                if key != self.pixel_visited:
-                    self.emit_brush(item)
-                self.pixel_visited = key
+                if event.button == 1:
+                    self.emit_brush(item, True)
+                if event.button == 3:
+                    self.emit_brush(item, False)
+                #self.pixel_visited = key
 
 
 

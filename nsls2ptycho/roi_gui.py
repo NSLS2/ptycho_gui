@@ -1,34 +1,39 @@
 import sys
 from PyQt5 import QtWidgets
-from nsls2ptycho.ui import ui_roi
+from .ui import ui_roi
 
 import numpy as np
-from nsls2ptycho.core.widgets.imgTools import find_outlier_pixels, find_brightest_pixels, rm_outlier_pixels
-from nsls2ptycho.core.ptycho_recon import HardWorker
-from nsls2ptycho.core.widgets.badpixel_dialog import BadPixelDialog
-from nsls2ptycho.core.databroker_api import save_data
+from .core.widgets.imgTools import find_outlier_pixels, find_brightest_pixels, rm_outlier_pixels
+from .core.widgets.badpixel_dialog import BadPixelDialog
+from .core.databroker_api import save_data
 
 
 class RoiWindow(QtWidgets.QMainWindow, ui_roi.Ui_MainWindow):
 
-    def __init__(self, parent=None, image=None, param=None, main_window=None):
+    def __init__(self, parent=None, image=None, param=None, main_window=None, overflow_value=None):
         super().__init__(parent)
         self.setupUi(self)
         QtWidgets.QApplication.setStyle('Plastique')
 
+        self.main_window = main_window # need to know the caller
+        self.overflow_value = overflow_value
+
         #image = np.load('./34784_frame0.npy')
         if image is not None:
-            self.canvas.draw_image(image, cmap='gray', init_roi=True, use_log=False)
+            roi = [main_window.sp_batch_x0.value(),main_window.sp_batch_y0.value(),main_window.sp_batch_width.value(),main_window.sp_batch_height.value()]
+            self.canvas.draw_image(image, cmap='gray', init_roi=roi, use_log=False)
 
         # signal
         self.roi_changed = self.canvas.roi_changed
         #self.reset = self.canvas.reset
 
         # connect
-        self.btn_badpixels_outliers.clicked.connect(self.find_badpixels)
+        #self.btn_badpixels_outliers.clicked.connect(self.find_badpixels)
         self.btn_badpixels_correct.clicked.connect(self.correct_badpixels)
+        self.btn_badpixels_save.clicked.connect(self.save_badpixels)
+        self.btn_badpixels_load.clicked.connect(self.load_badpixels)
         self.ck_show_badpixels.clicked.connect(self.show_badpixels)
-        self.btn_save_to_h5.clicked.connect(self.save_to_h5)
+        self.btn_save_to_h5.clicked.connect(self.save_to_h5_ui)
         self.ck_logscale.toggled.connect(self.use_logscale)
         self.actionBadpixels.triggered.connect(self.open_badpixel_dialog)
         self.canvas.btn_home.clicked.connect(self.reset_window)
@@ -36,15 +41,25 @@ class RoiWindow(QtWidgets.QMainWindow, ui_roi.Ui_MainWindow):
         # badpixels
         self.badpixel_dialog = None
         #self.badpixels_method = BADPIX_OUTLIERS # method applied to get the badpixels
+        # badpixel_file = main_window.le_batch_badpixel.text()
+        # if badpixel_file is not None and len(badpixel_file) > 0:
+        #     with open(badpixel_file, 'r') as f:
+        #         for line in f:
+        #             x, y = map(int, line.strip().split())
+        #             self.canvas.update_overlay((y, x),True)
 
         # for h5 operation
-        self.main_window = main_window # need to know the caller
         self.roi_width = None
         self.roi_height = None
         self.cx = None
         self.cy = None
-        self.sp_threshold.setValue(1.0)
-        self._worker_thread = None
+        self.sp_threshold.setValue(0.0)
+
+    def set_image(self,image,main_window):
+        if image is not None:
+            roi = [main_window.sp_batch_x0.value(),main_window.sp_batch_y0.value(),main_window.sp_batch_width.value(),main_window.sp_batch_height.value()]
+            self.canvas.draw_image(image, cmap='gray', init_roi=roi, use_log=False)
+
 
     def reset_window(self):
         # When this function is called, self.canvas._on_reset() is also called
@@ -62,11 +77,10 @@ class RoiWindow(QtWidgets.QMainWindow, ui_roi.Ui_MainWindow):
         self.roi_height = None
         self.cx = None
         self.cy = None
-        self.sp_threshold.setValue(1.0)
-        self._worker_thread = None
+        self.sp_threshold.setValue(0.0)
 
         #self.btn_badpixels_brightest.setChecked(False)
-        self.btn_badpixels_outliers.setChecked(False)
+        #self.btn_badpixels_outliers.setChecked(False)
         self.btn_badpixels_correct.setChecked(False)
         self.ck_show_badpixels.setChecked(False)
         self.ck_logscale.setChecked(False)
@@ -103,7 +117,8 @@ class RoiWindow(QtWidgets.QMainWindow, ui_roi.Ui_MainWindow):
             )
             roi_img = img[region]
 
-        badpixels = find_outlier_pixels(roi_img)
+        # badpixels = find_outlier_pixels(roi_img)
+        # badpixels = self.canvas.get_badpixels()
 
         self.roi_width = roi_width
         self.roi_height = roi_height
@@ -111,43 +126,60 @@ class RoiWindow(QtWidgets.QMainWindow, ui_roi.Ui_MainWindow):
         self.cx = x0 + roi_width // 2
         self.cy = y0 + roi_height // 2
 
-        self.canvas.set_overlay(badpixels[0] + y0, badpixels[1] + x0)
+        # self.canvas.set_overlay(badpixels[0], badpixels[1])
         #todo: update badpixel_dialog if it is opened
         self.ck_show_badpixels.setChecked(True)
         self.btn_badpixels_correct.setEnabled(True)
 
     def correct_badpixels(self):
+        if self.overflow_value is not None:
+            overflow_indices = np.where(self.canvas.image==self.overflow_value)
+            self.canvas.set_overlay(overflow_indices[0],overflow_indices[1])
         badpixels = self.canvas.get_badpixels()
         if badpixels is None: return
-
+        
         img = self.canvas.image
         img = rm_outlier_pixels(img, badpixels[0], badpixels[1])
 
-        self.canvas.draw_image(img)
-        self.canvas.clear_overlay()
+        self.canvas.draw_image(img, use_log = self.ck_logscale.checkState())
+        # self.canvas.clear_overlay()
         # update badpixels with corrected one
-        self.find_badpixels()
+        # self.find_badpixels()
 
     def show_badpixels(self, state):
         self.canvas.show_overlay(state)
+        
+    def save_badpixels(self):
+        badpixels = self.canvas.get_badpixels()
+        
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(self, 'Save bad pixels to txt', filter="(*.txt)")
+        if filename is not None and len(filename) > 0:
+            if filename[-4:] != ".txt":
+                filename += ".txt"
+            with open(filename, 'w') as f:
+                if badpixels is not None:
+                    for i in range(len(badpixels[0])):
+                        f.write("%d %d\n"%(badpixels[0][i],badpixels[1][i]))
+    
+    def load_badpixels(self):
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Load bad pixels from txt (add to current selection)', filter="(*.txt)")
+        if filename is not None and len(filename) > 0:
+            with open(filename, 'r') as f:
+                for line in f:
+                    x, y = map(int, line.strip().split())
+                    self.canvas.update_overlay((y, x),True)
 
     def use_logscale(self, state):
-        self.canvas.use_logscale(state)
+        self.canvas.draw_image(self.canvas.image,use_log=state)
 
-    def save_to_h5(self):
+    def save_to_h5_ui(self):
         master = self.main_window
         if master is None:
-            return
-
-        # need an up-to-date param
-        master.update_param_from_gui()
-        p = master.param
-        if p.z_m == 0.:
-            print("[ERROR] detector distance (z_m) is 0 --- maybe forget to set it?", file=sys.stderr)
             return
     
         # get threshold
         threshold = self.sp_threshold.value()
+        upsample = self.sp_upsample.value()
 
         # get bad pixels
         # TODO: need a better foolproof way
@@ -158,31 +190,20 @@ class RoiWindow(QtWidgets.QMainWindow, ui_roi.Ui_MainWindow):
         badpixels = self.canvas.get_badpixels()
         # TODO: separate this part to another function?
 
-        if len(badpixels) == 2 and len(badpixels[0]) == len(badpixels[1]) > 0:
+        if badpixels is not None and len(badpixels) == 2 and len(badpixels[0]) == len(badpixels[1]) > 0:
             pass
-            #print("bad pixels:")
+            print("%d bad pixels will be corrected"%len(badpixels[0]))
             #for y, x in zip(badpixels[0], badpixels[1]):
             #    print("  (x, y) = ({0}, {1})".format(x, y))
         else:
-            badpixels = None
+            badpixels = []
             print("no bad pixels")
-
+    
         # get blue rois
         blue_rois = self.canvas.get_blue_roi()
         #print(blue_rois)
 
-        thread = self._worker_thread \
-               = HardWorker("save_h5", master.db, p, int(p.scan_num), self.roi_width, self.roi_height,
-                                       self.cx, self.cy, threshold, badpixels, blue_rois)
-        thread.finished.connect(lambda: self.btn_save_to_h5.setEnabled(True))
-        thread.exception_handler = master.exception_handler
-        thread.setTerminationEnabled()
-        self.btn_save_to_h5.setEnabled(False)
-        thread.start()
-
-        # update Exp parameters. Note that there's a np.rot90 to the images in save_h5!!!
-        master.sp_x_arr_size.setValue(self.roi_height)
-        master.sp_y_arr_size.setValue(self.roi_width)
+        master.save_to_h5(self.roi_width, self.roi_height, self.cx, self.cy, threshold, badpixels, blue_rois, upsample, save_diff = False)
 
 
 if __name__ == '__main__':

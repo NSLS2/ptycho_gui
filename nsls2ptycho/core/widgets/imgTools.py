@@ -10,7 +10,7 @@ def rm_outlier_pixels(data, rows, cols, set_to_zero=False):
     else:
         assert(len(rows) == len(cols))
         for x, y in zip(rows, cols):
-            data[x,y] = np.median(data[x-1:x+1,y-1:y+1])
+            data[x,y] = np.median(data[x-1:x+2,y-1:y+2])
     return data
 
 

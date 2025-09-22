@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Form implementation generated from reading ui file 'ui_roi.ui'
+# Form implementation generated from reading ui file '/nsls2/users/zgao1/python_packages/nsls2ptycho2/ui/ui_roi.ui'
 #
 # Created by: PyQt5 UI code generator 5.15.7
 #
@@ -139,13 +139,3 @@ class Ui_MainWindow(object):
         self.menuTools.setTitle(_translate("MainWindow", "Tools"))
         self.actionBadpixels.setText(_translate("MainWindow", "show badpixel list"))
 from ..core.widgets.mplcanvastool import MplCanvasTool
-
-
-if __name__ == "__main__":
-    import sys
-    app = QtWidgets.QApplication(sys.argv)
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-    MainWindow.show()
-    sys.exit(app.exec_())

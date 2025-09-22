@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>600</width>
-    <height>800</height>
+    <width>1039</width>
+    <height>1119</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -23,69 +23,68 @@
    <widget class="MplCanvas" name="canvas_object_amp" native="true">
     <property name="geometry">
      <rect>
-      <x>40</x>
-      <y>40</y>
-      <width>250</width>
-      <height>240</height>
+      <x>530</x>
+      <y>50</y>
+      <width>491</width>
+      <height>491</height>
      </rect>
     </property>
    </widget>
    <widget class="MplCanvas" name="canvas_probe_amp" native="true">
     <property name="geometry">
      <rect>
-      <x>320</x>
-      <y>40</y>
-      <width>250</width>
-      <height>240</height>
+      <x>20</x>
+      <y>580</y>
+      <width>241</width>
+      <height>241</height>
      </rect>
     </property>
    </widget>
    <widget class="QComboBox" name="cb_image_object">
     <property name="geometry">
      <rect>
-      <x>30</x>
+      <x>400</x>
       <y>10</y>
-      <width>250</width>
+      <width>241</width>
       <height>27</height>
      </rect>
     </property>
+    <property name="editable">
+     <bool>false</bool>
+    </property>
+    <property name="currentText">
+     <string>object</string>
+    </property>
+    <property name="currentIndex">
+     <number>0</number>
+    </property>
     <item>
      <property name="text">
-      <string>object phase</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>object amplitude</string>
+      <string>object</string>
      </property>
     </item>
    </widget>
    <widget class="QComboBox" name="cb_image_probe">
     <property name="geometry">
      <rect>
-      <x>320</x>
-      <y>10</y>
-      <width>250</width>
+      <x>400</x>
+      <y>550</y>
+      <width>241</width>
       <height>27</height>
      </rect>
     </property>
     <item>
      <property name="text">
-      <string>probe amplitude</string>
-     </property>
-    </item>
-    <item>
-     <property name="text">
-      <string>probe phase</string>
+      <string>probe</string>
      </property>
     </item>
    </widget>
    <widget class="MplCanvas" name="canvas_object_chi" native="true">
     <property name="geometry">
      <rect>
-      <x>40</x>
-      <y>540</y>
-      <width>250</width>
+      <x>20</x>
+      <y>840</y>
+      <width>491</width>
       <height>100</height>
      </rect>
     </property>
@@ -93,9 +92,9 @@
    <widget class="MplCanvas" name="canvas_probe_chi" native="true">
     <property name="geometry">
      <rect>
-      <x>320</x>
-      <y>540</y>
-      <width>250</width>
+      <x>530</x>
+      <y>840</y>
+      <width>491</width>
       <height>100</height>
      </rect>
     </property>
@@ -103,28 +102,28 @@
    <widget class="MplCanvas" name="canvas_object_pha" native="true">
     <property name="geometry">
      <rect>
-      <x>40</x>
-      <y>290</y>
-      <width>250</width>
-      <height>240</height>
+      <x>20</x>
+      <y>49</y>
+      <width>491</width>
+      <height>491</height>
      </rect>
     </property>
    </widget>
    <widget class="MplCanvas" name="canvas_probe_pha" native="true">
     <property name="geometry">
      <rect>
-      <x>320</x>
-      <y>290</y>
-      <width>250</width>
-      <height>240</height>
+      <x>270</x>
+      <y>580</y>
+      <width>241</width>
+      <height>241</height>
      </rect>
     </property>
    </widget>
    <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
-      <x>20</x>
-      <y>632</y>
+      <x>250</x>
+      <y>950</y>
       <width>560</width>
       <height>159</height>
      </rect>
@@ -288,31 +287,11 @@
      </item>
     </layout>
    </widget>
-   <widget class="QLabel" name="label_6">
-    <property name="geometry">
-     <rect>
-      <x>250</x>
-      <y>30</y>
-      <width>100</width>
-      <height>21</height>
-     </rect>
-    </property>
-    <property name="font">
-     <font>
-      <pointsize>14</pointsize>
-      <weight>50</weight>
-      <bold>false</bold>
-     </font>
-    </property>
-    <property name="text">
-     <string>Amplitude</string>
-    </property>
-   </widget>
    <widget class="QLabel" name="label_8">
     <property name="geometry">
      <rect>
-      <x>275</x>
-      <y>280</y>
+      <x>240</x>
+      <y>30</y>
       <width>81</width>
       <height>21</height>
      </rect>
@@ -331,9 +310,9 @@
    <widget class="QLabel" name="label_10">
     <property name="geometry">
      <rect>
-      <x>280</x>
-      <y>530</y>
-      <width>81</width>
+      <x>220</x>
+      <y>830</y>
+      <width>91</width>
       <height>21</height>
      </rect>
     </property>
@@ -345,9 +324,150 @@
      </font>
     </property>
     <property name="text">
-     <string>Error</string>
+     <string>Error_obj</string>
     </property>
    </widget>
+   <widget class="MplCanvas" name="canvas_probe_fft" native="true">
+    <property name="geometry">
+     <rect>
+      <x>780</x>
+      <y>580</y>
+      <width>241</width>
+      <height>241</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="MplCanvas" name="canvas_probe_comp" native="true">
+    <property name="geometry">
+     <rect>
+      <x>530</x>
+      <y>580</y>
+      <width>241</width>
+      <height>241</height>
+     </rect>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_9">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>560</y>
+      <width>121</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>Amplitude</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_11">
+    <property name="geometry">
+     <rect>
+      <x>730</x>
+      <y>30</y>
+      <width>111</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>Amplitude</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_12">
+    <property name="geometry">
+     <rect>
+      <x>270</x>
+      <y>560</y>
+      <width>121</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>Phase</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_13">
+    <property name="geometry">
+     <rect>
+      <x>690</x>
+      <y>560</y>
+      <width>121</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>Complex</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_14">
+    <property name="geometry">
+     <rect>
+      <x>930</x>
+      <y>560</y>
+      <width>121</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>FFT probe</string>
+    </property>
+   </widget>
+   <widget class="QLabel" name="label_15">
+    <property name="geometry">
+     <rect>
+      <x>730</x>
+      <y>830</y>
+      <width>91</width>
+      <height>21</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <pointsize>14</pointsize>
+      <weight>50</weight>
+      <bold>false</bold>
+     </font>
+    </property>
+    <property name="text">
+     <string>Error_prb</string>
+    </property>
+   </widget>
+   <zorder>canvas_object_pha</zorder>
    <zorder>layoutWidget</zorder>
    <zorder>canvas_object_amp</zorder>
    <zorder>canvas_probe_amp</zorder>
@@ -355,18 +475,24 @@
    <zorder>cb_image_probe</zorder>
    <zorder>canvas_object_chi</zorder>
    <zorder>canvas_probe_chi</zorder>
-   <zorder>canvas_object_pha</zorder>
    <zorder>canvas_probe_pha</zorder>
-   <zorder>label_6</zorder>
    <zorder>label_8</zorder>
    <zorder>label_10</zorder>
+   <zorder>canvas_probe_fft</zorder>
+   <zorder>canvas_probe_comp</zorder>
+   <zorder>label_9</zorder>
+   <zorder>label_11</zorder>
+   <zorder>label_12</zorder>
+   <zorder>label_13</zorder>
+   <zorder>label_14</zorder>
+   <zorder>label_15</zorder>
   </widget>
  </widget>
  <customwidgets>
   <customwidget>
    <class>MplCanvas</class>
    <extends>QWidget</extends>
-   <header>nsls2ptycho.core.widgets.mplcanvas</header>
+   <header>..core.widgets.mplcanvas</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

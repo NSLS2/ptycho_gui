@@ -11,7 +11,7 @@ import mpi4py
 mpi4py.rc.initialize = False
 from mpi4py import MPI
 
-from nsls2ptycho.core.ptycho.utils import split
+from .ptycho.utils import split
 
 
 # DEPRECARED: migrated to nsls2ptycho.core.widgets.mplcanvas
@@ -113,8 +113,35 @@ def use_mpi_machinefile(mpirun_command, mpi_file_path):
 
 def set_flush_early(mpirun_command):
     if 'MPICH' in MPI.get_vendor()[0] or 'MVAPICH' in MPI.get_vendor()[0]:
-        mpirun_command.insert(-2, "-u") # force flush asap (MPICH is weird...)
+        mpirun_command.insert(4, "-u") # force flush asap (MPICH is weird...)
     return mpirun_command
+
+def parse_range2(batch_items, batch_processing = True):
+    '''
+    Note the range is inclusive on both ends.
+    Ex: 1238 - 1242 with step size 2 --> [1238, 1240, 1242]
+    '''
+    scan_range = []
+    scan_numbers = []
+
+    if batch_processing and not batch_items:
+        raise ValueError("No item list is given for batch processing.")
+
+    # first parse items and separate them into two catogories
+    slist = batch_items.split(',')
+    for item in slist:
+        if ':' in item:
+            sublist = np.arange(0,1e6,dtype=np.int32)[slice(*map(lambda x: int(x.strip()) if x.strip() else None,item.split(':')))]
+            scan_numbers += list(sublist)
+        elif len(item) == 0:  # for empty string
+            continue
+        else:
+            scan_numbers.append(int(item.strip()))
+
+    if batch_processing:
+        scan_numbers.sort(reverse=True)
+
+    return scan_numbers
 
 
 def parse_range(batch_items, every_nth_item = 1, batch_processing = True):

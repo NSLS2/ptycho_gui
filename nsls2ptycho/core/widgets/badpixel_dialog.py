@@ -1,5 +1,5 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from nsls2ptycho.ui import ui_badpixels
+from ...ui import ui_badpixels
 
 # todo: interactive item add and delete
 class BadPixelDialog(QtWidgets.QDialog, ui_badpixels.Ui_Dialog):

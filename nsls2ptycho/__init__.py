@@ -1,5 +1,5 @@
-import nsls2ptycho.core
-import nsls2ptycho.ui
+from . import core
+from . import ui
 from ._version import __version__
 
-name = "nsls2ptycho"
+name = "nsls2ptycho2"

@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
-from nsls2ptycho.core.utils import parse_range
-from nsls2ptycho.ui import ui_list_dialog
+from ..utils import parse_range2
+from ...ui import ui_list_dialog
 
 
 #def _dragEnterEvent(listWidget, event):
@@ -45,7 +45,7 @@ class ListWidget(QtWidgets.QDialog, ui_list_dialog.Ui_Form):
 #        self.destroy()
 
     def add_item(self):
-        items = parse_range(self.le_input.text(), batch_processing=False)
+        items = parse_range2(self.le_input.text(), batch_processing=False)
         self.listWidget.addItems([str(item) for item in items])
         self.le_input.setText('')
         #self.listWidget.sortItems()

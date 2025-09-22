@@ -11,7 +11,7 @@ import csv
 import numpy as np
 from PIL import Image
 
-from nsls2ptycho.core.ptycho.utils import split
+from ..ptycho.utils import split
 
 
 def load_image_pil(path):
@@ -78,13 +78,16 @@ class MplCanvas(FigureCanvas):
         self.axes.set_axis_on()
         make_axes_area_auto_adjustable(self.axes)
 
-    def update_image(self, image):
+    def update_image(self, image, clim = None):
         if self.image_handlers is None:
             self.image_handlers = self.axes.imshow(image)
         else:
             self.image_handlers.set_data(image)
             # amplitude and phase have dramatically different ranges, so rescaling is necessary
-            self.image_handlers.autoscale()
+            if clim:
+                self.image_handlers.set_clim(clim)
+            else:
+                self.image_handlers.autoscale()
         self.draw()
 
     def update_plot(self, xValues, yValues):

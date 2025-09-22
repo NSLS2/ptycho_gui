@@ -3,7 +3,7 @@ import sys
 import numpy as np
 from PyQt5 import QtWidgets
 
-from nsls2ptycho.ui import ui_scan
+from .ui import ui_scan
 
 class ScanWindow(QtWidgets.QMainWindow, ui_scan.Ui_MainWindow):
     def __init__(self, parent=None):

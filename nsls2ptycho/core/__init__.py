@@ -1,2 +1,2 @@
-import nsls2ptycho.core.ptycho
-import nsls2ptycho.core.widgets
+from . import ptycho
+from . import widgets

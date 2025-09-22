@@ -5,8 +5,8 @@ from matplotlib.figure import Figure
 from matplotlib.pyplot import Axes
 import numpy as np
 
-from nsls2ptycho.core.widgets.imgTools import estimate_roi
-from nsls2ptycho.core.widgets.eventhandler import EventHandler
+from .imgTools import estimate_roi
+from .eventhandler import EventHandler
 
 
 class MplCanvasTool(QtWidgets.QWidget):
@@ -39,7 +39,10 @@ class MplCanvasTool(QtWidgets.QWidget):
         layout.addWidget(self.canvas)
         layout.addLayout(self._get_toolbar())
         layout.addLayout(self._get_roi_bar())
+        layout.addLayout(self._get_help_bar())
         self.setLayout(layout)
+
+        self._update_help(0)
 
         self._eventHandler.brush_changed.connect(self.update_overlay)
 
@@ -110,6 +113,20 @@ class MplCanvasTool(QtWidgets.QWidget):
         spacerItem = QtWidgets.QSpacerItem(0,0,QtWidgets.QSizePolicy.Expanding,QtWidgets.QSizePolicy.Preferred)
         layout.addItem(spacerItem)
         return layout
+    
+    def _get_help_bar(self):
+        self.help_bar = QtWidgets.QLabel('Help')
+        layout = QtWidgets.QHBoxLayout()
+        layout.addWidget(self.help_bar)
+        return layout
+    
+    def _update_help(self,index = 0):
+        messages = {
+            0: "LMB to pan image, scroll to zoom.",
+            1: "LMB click to select ROI, LMB drag to move or create red ROI (data),\nRMB drag to create blue ROI (removal), LMB double click to remove ROI",
+            2: "LMB click or drag to mark pixels to remove, RMB to unmark."
+        }
+        self.help_bar.setText(messages.get(index,"Invalid index"))
 
     def _update_coord(self, ix, iy):
 
@@ -157,10 +174,13 @@ class MplCanvasTool(QtWidgets.QWidget):
         #el
         if self._active == 'roi':
             self._ids = self._eventHandler.roi_factory(self.ax)
+            self._update_help(1)
         elif self._active == 'brush':
             self._ids = self._eventHandler.brush_factory(self.ax)
+            self._update_help(2)
         else:
             self._ids = self._eventHandler.zoom_pan_factory(self.ax)
+            self._update_help(0)
 
     def _on_reset(self):
         # clear bad pixels to restore a clean state
@@ -174,12 +194,15 @@ class MplCanvasTool(QtWidgets.QWidget):
         self._eventHandler.roi_changed.disconnect(self._update_roi)
 
         for sp in self._roi_all:
-            sp.setValue(0.)
+            sp.setValue(0)
 
         self._eventHandler.ref_rect = None
         self._eventHandler.ref_idx = -1
         for rect in self._eventHandler.all_rect:
             rect.remove()
+        if self._eventHandler.cross is not None:
+            self._eventHandler.cross.remove()
+            self._eventHandler.cross = None
         self._eventHandler.all_rect = []
         #self.ax.figure.canvas.draw()
         #self.canvas.draw()
@@ -194,6 +217,10 @@ class MplCanvasTool(QtWidgets.QWidget):
             self.ax.set_xlim(0, width)
             self.ax.set_ylim(height, 0)
             self.canvas.draw()
+    
+    def _on_init_roi(self,roi):
+        self._eventHandler.set_curr_roi(self.ax, (roi[0],roi[1]), roi[2], roi[3])
+        self._update_roi(*roi)
 
     def _on_adjust_roi(self):
         '''
@@ -205,12 +232,12 @@ class MplCanvasTool(QtWidgets.QWidget):
             return
 
         _x0, _y0, _w, _h = estimate_roi(self.image, threshold=1.0)
-        cx = np.int(np.round(_x0 + _w//2))
-        cy = np.int(np.round(_y0 + _h//2))
+        cx = int(np.round(_x0 + _w//2))
+        cy = int(np.round(_y0 + _h//2))
 
         side = 32 * (np.maximum(_w, _h) // 32)
-        x0 = np.int(np.maximum(cx - side//2, 0))
-        y0 = np.int(np.maximum(cy - side//2, 0))
+        x0 = int(np.maximum(cx - side//2, 0))
+        y0 = int(np.maximum(cy - side//2, 0))
         x1 = x0 + side
         y1 = y0 + side
 
@@ -228,7 +255,7 @@ class MplCanvasTool(QtWidgets.QWidget):
 
     def reset(self):
         for sp in self._roi_all:
-            sp.setValue(0.)
+            sp.setValue(0)
         self.image = None
         self.image_data = None
         self.image_handler = None
@@ -238,11 +265,10 @@ class MplCanvasTool(QtWidgets.QWidget):
         self.ax.set_axis_off()
         self.canvas.draw()
 
-    def draw_image(self, image, cmap='gray', init_roi=False, use_log=False):
+    def draw_image(self, image, cmap='gray', init_roi=None, use_log=False):
         # TODO: merge this function and use_logscale()
         #print(cmap, init_roi, use_log)
         if use_log:
-            print('log scale')
             image_data = np.nan_to_num(np.log(image + 1.))
         else:
             image_data = image
@@ -252,47 +278,59 @@ class MplCanvasTool(QtWidgets.QWidget):
         else:
             self.image_handler.set_data(image_data)
             # todo: update data min, max (maybe not needed)
-        self.image_handler.set_clim(vmin=np.min(self.image_data), vmax=np.max(self.image_data))
+        self.image_handler.set_clim(vmin=np.min(image_data), vmax=np.max(image_data))
 
         self.image = image
         self.image_data = image_data
 
-        if init_roi:
-            self._on_adjust_roi()
+        if init_roi is not None:
+            if not any(init_roi):
+                self._on_adjust_roi()
+            else:
+                self._on_init_roi(init_roi)
 
         if len(self._ids) == 0:
             self._ids = self._eventHandler.zoom_pan_factory(self.ax)
 
         self.canvas.draw()
 
-    def update_overlay(self, pixel):
+    def update_overlay(self, pixel, onoff):
         '''
         Update overlay image from brushed pixels
         '''
         if self.image is None: return
+
+        self.show_overlay(True)
+        
         if self.overlay is None or self.overlay.shape[:2] != self.image.shape:
             self.overlay = np.zeros(self.image.shape + (4,), dtype=np.float32)
-
-        highlight = (1., 0., 0., .5)
+        
+        highlight = (1., 0., 1., .5)
         x, y = pixel
-        if self.overlay[y, x, 0] == 1.:
-            self.overlay[y, x] = (0., 0., 0., 0.)
-        else:
+        #if self.overlay[y, x, 0] == 1.:
+        #    self.overlay[y, x] = (0., 0., 0., 0.)
+        if onoff:
             self.overlay[y, x] = highlight
+        else:
+            self.overlay[y, x] = (0., 0., 0., 0.)
 
         if self.overlay_handler is None:
             self.overlay_handler = self.ax.imshow(self.overlay)
         else:
             self.overlay_handler.set_data(self.overlay)
             self.overlay_handler.set_visible(True)
+            self.show_overlay(True)
             # todo: set show badpixel flag
         self.canvas.draw()
+
 
     def set_overlay(self, rows, cols):
         if self.image is None: return
         if len(rows) != len(cols): return
 
-        highlight = (1, 0, 0, .5)
+        self.show_overlay(True)
+
+        highlight = (1., 0, 1., .5)
         if self.overlay is None:
             self.overlay = np.zeros(self.image.shape + (4,), dtype=np.float32)
 
@@ -349,10 +387,10 @@ class MplCanvasTool(QtWidgets.QWidget):
             if area > largest_area:
                 largest_area = area
                 largest_roi = (
-                    np.int(np.floor(x0 + 0.5)),
-                    np.int(np.floor(y0 + 0.5)),
-                    np.int(np.round(width)),
-                    np.int(np.round(height))
+                    int(np.floor(x0 + 0.5)),
+                    int(np.floor(y0 + 0.5)),
+                    int(np.round(width)),
+                    int(np.round(height))
                 )
 
         return largest_roi
@@ -373,10 +411,10 @@ class MplCanvasTool(QtWidgets.QWidget):
                 y0 += height
                 height = -height
             all_roi.append((
-                np.int(np.floor(x0 + 0.5)),
-                np.int(np.floor(y0 + 0.5)),
-                np.int(np.round(width)),
-                np.int(np.round(height))
+                int(np.floor(x0 + 0.5)),
+                int(np.floor(y0 + 0.5)),
+                int(np.round(width)),
+                int(np.round(height))
             ))
 
         return all_roi
