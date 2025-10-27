@@ -232,6 +232,7 @@ def slurm_server_monitor(slurm_header = None):
             os.listdir(os.path.expanduser("~") + "/.ptycho_gui/")
             with open(slurm_header,'r') as f:
                 l = f.readlines()[0].split()
+            os.remove(slurm_header)
         except:
             l = None
 
