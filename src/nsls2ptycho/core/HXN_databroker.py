@@ -208,7 +208,7 @@ def load_metadata(db, scan_num:int, det_name:str):
             scan_type = header.start['plan_name']
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
-            if True: # header.start['plan_name'].startswith('pt_') or header.start['plan_name'].startswith('rasmi'):
+            if scan_doc['type'].startswith('FIP'): # header.start['plan_name'].startswith('pt_') or header.start['plan_name'].startswith('rasmi'):
                 if 'sclr1' in scan_doc['detectors']:
                     # Sclr1 used
                     items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
@@ -233,7 +233,7 @@ def load_metadata(db, scan_num:int, det_name:str):
             dcm_th = bl.dcm_th[1]
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
 
-            if scan_doc['type'] == 'FIP_2D_FLY':
+            if scan_doc['type'].startswith('FIP'):
                 x_range = np.abs(scan_doc['scan_input'][1])
                 y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
                 x_num = scan_doc['scan_input'][2]
