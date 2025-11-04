@@ -25,7 +25,7 @@ class recon_worker:
     def __init__(self,work_path):
         self.work_path = work_path
         self.srv_name = socket.gethostname().split('.')[0]
-        self.monitor_path = os.path.join(os.path.abspath(self.work_path),'remote_'+self.srv_name)
+        self.monitor_path = os.path.join(os.path.abspath(self.work_path),'remote_'+self.srv_name+'_'+os.getlogin())
         self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'))
         self.fname = None
         self.fname_full = None
