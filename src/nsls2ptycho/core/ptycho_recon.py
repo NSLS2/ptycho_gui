@@ -117,7 +117,7 @@ class PtychoReconRemote(QtCore.QThread):
                     "#SBATCH --output=%x.out\n\n"
                     "module purge\n"
                     "module load beamline-aliases\n\n"
-                    "load-hxn\n\n"
+                    "source load-hxn\n\n"
                     "srun python solve.py",
           "environment": ["PATH=/usr/bin:/bin:/usr/sbin:/sbin", "SLURM_EXPORT_ENV=ALL"],
           "working_dir_path": "/nsls2/users/skarakuzu1/orion_ptycho"
