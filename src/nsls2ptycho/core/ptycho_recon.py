@@ -10,6 +10,10 @@ import numpy as np
 import traceback
 import time
 
+
+import requests
+import json
+
 from .databroker_api import load_metadata, save_data
 from .utils import use_mpi_machinefile, set_flush_early
 from .ptycho.utils import save_config
@@ -98,7 +102,37 @@ class PtychoReconRemote(QtCore.QThread):
                 os.remove(slurm_header)
             except:
                 pass
-    
+   
+    def submit_job(self):
+        url = "https://orion-api-staging.nsls2.bnl.gov/api/v1/compute/orion/jobs"
+        bearer_token = os.getenv("SLURM_JWT")
+
+        payload = {
+          "script": "#!/bin/bash -l\n"
+                    "#SBATCH --job-name=trial\n"
+                    "#SBATCH --time=0-00:10:00\n"
+                    "#SBATCH --nodes=1\n"
+                    "#SBATCH --ntasks-per-node=2\n"
+                    "#SBATCH --error=%x.err\n"
+                    "#SBATCH --output=%x.out\n\n"
+                    "module purge\n"
+                    "module load beamline-aliases\n\n"
+                    "load-hxn\n\n"
+                    "srun python solve.py",
+          "environment": ["PATH=/usr/bin:/bin:/usr/sbin:/sbin", "SLURM_EXPORT_ENV=ALL"],
+          "working_dir_path": "/nsls2/users/skarakuzu1/orion_ptycho"
+        }
+        
+        print(payload)
+        headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {bearer_token}"
+                }
+
+        response = requests.post(url, headers=headers, json=payload)
+        print("response is ", response)
+
+
     def recon_remote(self, param:Param, update_fcn=None):
 
         self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign)
@@ -118,6 +152,9 @@ class PtychoReconRemote(QtCore.QThread):
         self.export_slurm_header()
 
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
+
+        print("Submitting job from the gui")
+        self.submit_job()
 
         # try:
         time.sleep(1)
@@ -157,7 +194,7 @@ class PtychoReconRemote(QtCore.QThread):
         #     pass
 
     def run(self):
-        print('Ptycho thread started')
+        print('Ptycho thread started helloooo***')
         try:
             self.recon_remote(self.param, self.update_signal.emit)
         except IndexError:
