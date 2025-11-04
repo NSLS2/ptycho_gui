@@ -208,7 +208,7 @@ def load_metadata(db, scan_num:int, det_name:str):
             scan_type = header.start['plan_name']
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
-            if header.start['plan_name'].startswith('pt') or header.start['plan_name'].startswith('rasmi'):
+            if scan_doc['type'].startswith('FIP'): # header.start['plan_name'].startswith('pt_') or header.start['plan_name'].startswith('rasmi'):
                 if 'sclr1' in scan_doc['detectors']:
                     # Sclr1 used
                     items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
@@ -219,9 +219,9 @@ def load_metadata(db, scan_num:int, det_name:str):
                     ic_chan = 'sclr3_ch4'
                 else:
                     # Ignore scaler
+                    print("\nCannot detect scaler used for this scan in start document, will skip the normalization...")
                     items = [det_name, 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                     ic_chan = None
-
             else:
                 items = [det_name, 'sclr1_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                 ic_chan = 'sclr1_ch4'
@@ -233,21 +233,22 @@ def load_metadata(db, scan_num:int, det_name:str):
             dcm_th = bl.dcm_th[1]
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
 
-            if scan_motors[0].endswith('ssy'):
-                y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
-                x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
-                y_num = scan_doc['scan_input'][2]
-                x_num = scan_doc['scan_input'][5]        
-            elif not header.start['plan_name'].startswith('pt'):
-                x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
-                y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
-                x_num = scan_doc['scan_input'][2]
-                y_num = scan_doc['scan_input'][5]       
-            else:
+            if scan_doc['type'].startswith('FIP'):
                 x_range = np.abs(scan_doc['scan_input'][1])
                 y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
                 x_num = scan_doc['scan_input'][2]
                 y_num = scan_doc['scan_input'][5]       
+            else:
+                y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+                x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+                y_num = scan_doc['scan_input'][2]
+                x_num = scan_doc['scan_input'][5]        
+
+            # elif not header.start['plan_name'].startswith('pt_'):
+            #     x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+            #     y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+            #     x_num = scan_doc['scan_input'][2]
+            #     y_num = scan_doc['scan_input'][5]       
             # get x_range, y_range, dr_x, dr_y
             dr_x = 1.*x_range/x_num
             dr_y = 1.*y_range/y_num
