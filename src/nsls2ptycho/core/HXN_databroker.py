@@ -208,7 +208,7 @@ def load_metadata(db, scan_num:int, det_name:str):
             scan_type = header.start['plan_name']
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
-            if header.start['plan_name'].startswith('pt') or header.start['plan_name'].startswith('rasmi'):
+            if header.start['plan_name'].startswith('pt_') or header.start['plan_name'].startswith('rasmi'):
                 if 'sclr1' in scan_doc['detectors']:
                     # Sclr1 used
                     items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
