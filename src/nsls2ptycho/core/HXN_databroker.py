@@ -652,6 +652,8 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
         dset = hf.create_dataset('y_pixel_m', data=y_pixel_m)
         dset = hf.create_dataset('x_depth_field_m', data=x_depth_of_field_m)
         dset = hf.create_dataset('y_depth_field_m', data=y_depth_of_field_m)
+    
+    os.chmod(file_path,0o666)
 
     # symlink so ptycho can find it
     try:
