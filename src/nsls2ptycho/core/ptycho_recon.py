@@ -14,6 +14,11 @@ from .databroker_api import load_metadata, save_data
 from .utils import use_mpi_machinefile, set_flush_early
 from .ptycho.utils import save_config
 
+try:
+    from ..remote_worker import SLURM_SERVER_NAME
+except:
+    SLURM_SERVER_NAME = None
+
 class PtychoReconRemote(QtCore.QThread):
     update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)
 
@@ -24,7 +29,7 @@ class PtychoReconRemote(QtCore.QThread):
 
         self.return_value = None
 
-        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv)
+        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+os.getlogin())
         if not os.path.isdir(self.remote_path):
             os.mkdir(self.remote_path)
 
@@ -115,7 +120,8 @@ class PtychoReconRemote(QtCore.QThread):
             param.obj_path = os.path.realpath(param.obj_path)
         
         save_config(self.fname_full,param)
-        self.export_slurm_header()
+        if SLURM_SERVER_NAME != None and self.param.remote_srv.startswith(SLURM_SERVER_NAME):
+            self.export_slurm_header()
 
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
@@ -172,7 +178,8 @@ class PtychoReconRemote(QtCore.QThread):
                 self.update_signal.emit(self.param.n_iterations+1,None)
             
         finally:
-            self.clear_slurm_header()
+            if SLURM_SERVER_NAME != None and self.param.remote_srv.startswith(SLURM_SERVER_NAME):
+                self.clear_slurm_header()
             print('finally?')
 
     def kill(self):

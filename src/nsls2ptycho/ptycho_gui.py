@@ -953,8 +953,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         elif (it-1) % self.param.display_interval == 0 and self.param.remote_srv:
                             if self.it_last - it < self.param.display_interval:
                                 tnow = time.time()
-                                prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'prb_live.npy')
-                                obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv,'obj_live.npy')
+                                prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+os.getlogin(),'prb_live.npy')
+                                obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+os.getlogin(),'obj_live.npy')
                                 while (time.time()-tnow)<5:
                                     if os.path.exists(prb_live_file) and os.path.getsize(prb_live_file)>0 and os.path.exists(obj_live_file) and os.path.getsize(obj_live_file)>0:
                                     #time.sleep(1) # wait for the npy files in file system
