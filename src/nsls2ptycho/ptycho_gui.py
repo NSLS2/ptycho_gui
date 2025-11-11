@@ -519,10 +519,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
 
             # this is needed because MPI processes need to know the working directory...
-            if self.param.gpu_flag and len(self.param.gpus) == 1:
+            if self.param.gpu_flag and len(self.param.gpus) == 1 and self.param.gpus[0] == 0:
                 save_config(self._config_path,self.param)
             else:
-                raise NotImplementedError('Live recon on multiple gpus not implemented')
+                raise NotImplementedError('Live recon currently only runs on single GPU and only GPU 0.')
 
             # init reconStepWindow
             if self.ck_preview_flag.isChecked():
@@ -928,24 +928,24 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 self.reconStepWindow.reset_figs()
                                 self.reset_at_next = False    
                             # Replace zero with NaN for better visulization
-                            oit = self._obj[it-1]
+                            oit = self._obj[(it-1)%self.param.n_iterations]
                             oit[np.angle(oit)==0.1] = np.nan
                             if not self.param.multislice_flag:
                                 images = []
                                 for i in range(self.param.obj_mode_num):
-                                    images.append(np.rot90(np.angle(self._obj[it-1, i])))
-                                    images.append(np.rot90(np.abs(self._obj[it-1, i])))
+                                    images.append(np.rot90(np.angle(self._obj[(it-1)%self.param.n_iterations, i])))
+                                    images.append(np.rot90(np.abs(self._obj[(it-1)%self.param.n_iterations, i])))
                                 for i in range(self.param.prb_mode_num):
-                                    images.append(np.rot90(np.abs(self._prb[it-1, i])))
-                                    images.append(np.rot90(np.angle(self._prb[it-1, i])))
+                                    images.append(np.rot90(np.abs(self._prb[(it-1)%self.param.n_iterations, i])))
+                                    images.append(np.rot90(np.angle(self._prb[(it-1)%self.param.n_iterations, i])))
                             else:
                                 images = []
                                 for i in range(self.param.slice_num):
-                                    images.append(np.rot90(np.angle(self._obj[it-1, i])))
-                                    images.append(np.rot90(np.abs(self._obj[it-1, i])))
+                                    images.append(np.rot90(np.angle(self._obj[(it-1)%self.param.n_iterations, i])))
+                                    images.append(np.rot90(np.abs(self._obj[(it-1)%self.param.n_iterations, i])))
                                 #TODO: decide which probe we'd like to present
-                                images.append(np.rot90(np.abs(self._prb[it-1, 0])))
-                                images.append(np.rot90(np.angle(self._prb[it-1, 0])))
+                                images.append(np.rot90(np.abs(self._prb[(it-1)%self.param.n_iterations, 0])))
+                                images.append(np.rot90(np.angle(self._prb[(it-1)%self.param.n_iterations, 0])))
 
                             self.reconStepWindow.update_images(it, images)
                             self.reconStepWindow.update_metric(it, data)
