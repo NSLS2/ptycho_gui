@@ -22,6 +22,11 @@ except:
     print("Unable to access HXN's database, loading from pre-saved h5 files only.", file=sys.stderr)
     hxn_db = None
 
+try:
+    from hxntools.motor_info import motor_table
+except:
+    motor_table = None
+
 
 # ***************************** "Public API" *****************************
 # The following functions must exist in nsls2ptycho/core/*_databroker.py,
@@ -156,30 +161,18 @@ def load_metadata(db, scan_num:int, det_name:str):
         points[1] = np.array(df[scan_motors[1]])
 
         # get angle, ic
-        if scan_motors[1] == 'ssy':
+        if scan_motors[0].startswith('ss'):
             angle = 0#bl.zpsth[1]
-            ic = np.asfarray(df['sclr1_ch3'])
-        elif scan_motors[1] == 'zpssy':
-            if 'tomo_angle_offset'in header.start:
-                angle_offset = header.start['tomo_angle_offset']
-            else:
-                angle_offset = -0.2
-            if 'x_scale_factor'in header.start:
-                x_scale_factor = header.start['x_scale_factor']
-            else:
-                x_scale_factor = 0.9542
-            if 'z_scale_factor'in header.start:
-                z_scale_factor = header.start['z_scale_factor']
-            else:
-                z_scale_factor = 1.0309
-            angle = bl.zpsth[1] - angle_offset
-            if scan_motors[0] == 'zpssx':
-                points[0] = points[0] * x_scale_factor
-                dr_x *= x_scale_factor
-            elif scan_motors[0] == 'zpssz':
-                points[0] = points[0] * z_scale_factor
-                dr_x *= z_scale_factor
-            ic = np.asfarray(df['sclr1_ch4'])
+            try:
+                ic = np.asfarray(df['sclr1_ch3'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
+        elif scan_motors[0].startswith('zpss'):
+            angle = bl.zpsth[1]
+            try:
+                ic = np.asfarray(df['sclr1_ch4'])
+            except:
+                ic = np.ones(num_frame,dtype=np.float32)
         else:
             angle = bl.dsth[1]
             try:
@@ -215,7 +208,7 @@ def load_metadata(db, scan_num:int, det_name:str):
             scan_type = header.start['plan_name']
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
-            if header.start['plan_name'].startswith('pt'):
+            if scan_doc['type'].startswith('FIP'): # header.start['plan_name'].startswith('pt_') or header.start['plan_name'].startswith('rasmi'):
                 if 'sclr1' in scan_doc['detectors']:
                     # Sclr1 used
                     items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
@@ -226,9 +219,9 @@ def load_metadata(db, scan_num:int, det_name:str):
                     ic_chan = 'sclr3_ch4'
                 else:
                     # Ignore scaler
+                    print("\nCannot detect scaler used for this scan in start document, will skip the normalization...")
                     items = [det_name, 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                     ic_chan = None
-
             else:
                 items = [det_name, 'sclr1_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                 ic_chan = 'sclr1_ch4'
@@ -240,21 +233,22 @@ def load_metadata(db, scan_num:int, det_name:str):
             dcm_th = bl.dcm_th[1]
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
 
-            if scan_motors[0].endswith('ssy'):
-                y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
-                x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
-                y_num = scan_doc['scan_input'][2]
-                x_num = scan_doc['scan_input'][5]        
-            elif not header.start['plan_name'].startswith('pt'):
-                x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
-                y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
-                x_num = scan_doc['scan_input'][2]
-                y_num = scan_doc['scan_input'][5]       
-            else:
+            if scan_doc['type'].startswith('FIP'):
                 x_range = np.abs(scan_doc['scan_input'][1])
                 y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
                 x_num = scan_doc['scan_input'][2]
                 y_num = scan_doc['scan_input'][5]       
+            else:
+                y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+                x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+                y_num = scan_doc['scan_input'][2]
+                x_num = scan_doc['scan_input'][5]        
+
+            # elif not header.start['plan_name'].startswith('pt_'):
+            #     x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+            #     y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+            #     x_num = scan_doc['scan_input'][2]
+            #     y_num = scan_doc['scan_input'][5]       
             # get x_range, y_range, dr_x, dr_y
             dr_x = 1.*x_range/x_num
             dr_y = 1.*y_range/y_num
@@ -414,6 +408,13 @@ def load_metadata(db, scan_num:int, det_name:str):
             # get nx and ny by looking at the first image
             # img = db.reg.retrieve(mds_table.iat[0])[0]
             # nx, ny = img.shape # can also give a ValueError; TODO: come up a better way!
+
+    # Correct for motor scaling
+    if motor_table:
+        if scan_motors[0] in motor_table:
+            dr_x *= np.abs(motor_table[scan_motors[0]][1]*1.e4)
+        if scan_motors[1] in motor_table:
+            dr_y *= np.abs(motor_table[scan_motors[1]][1]*1.e4)
 
     handler = db.reg.get_spec_handler(mds_table.iat[0].split('/')[0])
     if hasattr(handler,'_filename'):
@@ -651,6 +652,11 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
         dset = hf.create_dataset('y_pixel_m', data=y_pixel_m)
         dset = hf.create_dataset('x_depth_field_m', data=x_depth_of_field_m)
         dset = hf.create_dataset('y_depth_field_m', data=y_depth_of_field_m)
+    
+    try:
+        os.chmod(file_path,0o666)
+    except:
+        pass
 
     # symlink so ptycho can find it
     try:

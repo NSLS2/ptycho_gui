@@ -14,6 +14,11 @@ from .databroker_api import load_metadata, save_data
 from .utils import use_mpi_machinefile, set_flush_early
 from .ptycho.utils import save_config
 
+try:
+    from ..remote_worker import SLURM_SERVER_NAME
+except:
+    SLURM_SERVER_NAME = None
+
 class PtychoReconRemote(QtCore.QThread):
     update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)
 
@@ -24,17 +29,17 @@ class PtychoReconRemote(QtCore.QThread):
 
         self.return_value = None
 
-        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv)
+        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+os.getlogin())
         if not os.path.isdir(self.remote_path):
             os.mkdir(self.remote_path)
 
-        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
-        if not os.path.isfile(self.msg_file):
-            with open(self.msg_file,'w') as f:
-                pass
-        self.msg = open(self.msg_file,'r')
-        self.msg.readlines()
+        if os.path.isfile(os.path.join(self.remote_path,'abort')):
+            os.remove(os.path.join(self.remote_path,'abort'))
 
+        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
+        with open(self.msg_file,'w') as f:
+            pass
+        self.msg = open(self.msg_file,'r')
     def _parse_message(self, tokens):
         def _parser(current, upper_limit, target_list):
             for j in range(upper_limit):
@@ -59,19 +64,13 @@ class PtychoReconRemote(QtCore.QThread):
         obj_list = []
         for i, token in enumerate(tokens):
             if token == 'probe_chi':
-                if self.param.mode_flag:
-                    _parser(i, self.param.prb_mode_num, prb_list)
+                _parser(i, self.param.prb_mode_num, prb_list)
                 #elif self.param.multislice_flag: 
-                #TODO: maybe multislice will have multiple prb in the future?
-                else:
-                    _parser(i, 1, prb_list)
             if token == 'object_chi':
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     _parser(i, self.param.obj_mode_num, obj_list)
-                elif self.param.multislice_flag:
-                    _parser(i, self.param.slice_num, obj_list)
                 else:
-                    _parser(i, 1, obj_list)
+                    _parser(i, self.param.slice_num, obj_list)
 
         # return a dictionary
         result = {'probe_chi':prb_list, 'object_chi':obj_list}
@@ -92,6 +91,19 @@ class PtychoReconRemote(QtCore.QThread):
 
         return stdout_2.split()
 
+    def export_slurm_header(self):
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
+        with open(slurm_header, 'w') as f:
+            f.write(self.remote_path+' '+str(len(self.param.gpus))+'\n')
+
+    def clear_slurm_header(self):
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
+        if os.path.exists(slurm_header):
+            try:
+                os.remove(slurm_header)
+            except:
+                pass
+    
     def recon_remote(self, param:Param, update_fcn=None):
 
         self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign)
@@ -108,13 +120,27 @@ class PtychoReconRemote(QtCore.QThread):
             param.obj_path = os.path.realpath(param.obj_path)
         
         save_config(self.fname_full,param)
+        if SLURM_SERVER_NAME != None and self.param.remote_srv.startswith(SLURM_SERVER_NAME):
+            self.export_slurm_header()
 
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
         # try:
-        while True:
+        time.sleep(1)
+        out = self.msg.readlines()
+        while not out:
+            print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
+            time.sleep(1)
             out = self.msg.readlines()
-            
+            if os.path.isfile(os.path.join(self.remote_path,'abort')):
+                os.remove(os.path.join(self.remote_path,'abort'))
+                if os.path.isfile(os.path.join(self.remote_path,'msg')):
+                    os.remove(os.path.join(self.remote_path,'msg'))
+                if os.path.isfile(self.fname_full):
+                    os.remove(self.fname_full)
+                raise Exception('Remote recon aborted...')
+
+        while True:
             for line in out:
                 print(line, end='') # because the line already ends with '\n'
                 tokens = line.split()
@@ -130,6 +156,7 @@ class PtychoReconRemote(QtCore.QThread):
                 break
             
             time.sleep(0.1)
+            out = self.msg.readlines()
         # except:
         #     pass
         # finally:
@@ -151,6 +178,8 @@ class PtychoReconRemote(QtCore.QThread):
                 self.update_signal.emit(self.param.n_iterations+1,None)
             
         finally:
+            if SLURM_SERVER_NAME != None and self.param.remote_srv.startswith(SLURM_SERVER_NAME):
+                self.clear_slurm_header()
             print('finally?')
 
     def kill(self):
@@ -191,19 +220,12 @@ class PtychoReconWorker(QtCore.QThread):
         obj_list = []
         for i, token in enumerate(tokens):
             if token == 'probe_chi':
-                if self.param.mode_flag:
-                    _parser(i, self.param.prb_mode_num, prb_list)
-                #elif self.param.multislice_flag: 
-                #TODO: maybe multislice will have multiple prb in the future?
-                else:
-                    _parser(i, 1, prb_list)
+                _parser(i, self.param.prb_mode_num, prb_list)
             if token == 'object_chi':
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     _parser(i, self.param.obj_mode_num, obj_list)
-                elif self.param.multislice_flag:
-                    _parser(i, self.param.slice_num, obj_list)
                 else:
-                    _parser(i, 1, obj_list)
+                    _parser(i, self.param.slice_num, obj_list)
 
         # return a dictionary
         result = {'probe_chi':prb_list, 'object_chi':obj_list}
@@ -227,10 +249,7 @@ class PtychoReconWorker(QtCore.QThread):
     def recon_api(self, param:Param, update_fcn=None):
         parent_module = '.'.join(self.__module__.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
         # "1" is just a placeholder to be overwritten soon
-        if param.gpu_flag and len(param.gpus) == 1:
-            mpirun_command = ["mpirun", "-n", "1", "python", "-W", "ignore", "-m",parent_module+".ptycho.recon_ptycho_gui","%d"%param.gpus[0]]
-        else:
-            mpirun_command = ["mpirun", "-n", "1", "python", "-W", "ignore", "-m",parent_module+".ptycho.recon_ptycho_gui"]
+        mpirun_command = ["mpirun", "-n", "1", "python", "-W", "ignore", "-m",parent_module+".ptycho.recon_ptycho_gui"]
 
         if param.mpi_file_path == '':
             if param.gpu_flag:
@@ -349,7 +368,7 @@ class PtychoReconLive(QtCore.QThread):
     def __init__(self, param:Param=None, parent=None):
         super().__init__(parent)
         self.param = param
-        self.config_file = parent._config_path+'%d'%param.gpus[0]
+        self.config_file = parent._config_path
         self.return_value = None
 
     def _parse_message(self, tokens):
@@ -379,19 +398,12 @@ class PtychoReconLive(QtCore.QThread):
         obj_list = []
         for i, token in enumerate(tokens):
             if token == 'probe_chi':
-                if self.param.mode_flag:
-                    _parser(i, self.param.prb_mode_num, prb_list)
-                #elif self.param.multislice_flag: 
-                #TODO: maybe multislice will have multiple prb in the future?
-                else:
-                    _parser(i, 1, prb_list)
+                _parser(i, self.param.prb_mode_num, prb_list)
             if token == 'object_chi':
-                if self.param.mode_flag:
+                if not self.param.multislice_flag:
                     _parser(i, self.param.obj_mode_num, obj_list)
-                elif self.param.multislice_flag:
-                    _parser(i, self.param.slice_num, obj_list)
                 else:
-                    _parser(i, 1, obj_list)
+                    _parser(i, self.param.slice_num, obj_list)
 
         # return a dictionary
         result = {'probe_chi':prb_list, 'object_chi':obj_list}
@@ -499,11 +511,12 @@ class PtychoReconLive(QtCore.QThread):
                 message = "At least one MPI process returned a nonzero value, so the whole job is aborted.\n"
                 message += "If you did not manually terminate it, consult the Traceback above to identify the problem."
                 raise Exception(message)
-        except Exception as ex:
+        except:
             traceback.print_exc()
             #print(ex, file=sys.stderr)
             #raise ex
         finally:
+            pass
             # clean up temp file
             filepath = param.working_directory + "/." + param.shm_name + ".txt"
             if os.path.isfile(filepath):
