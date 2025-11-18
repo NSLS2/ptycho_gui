@@ -5,6 +5,7 @@ from fcntl import fcntl, F_GETFL, F_SETFL
 from os import O_NONBLOCK
 import traceback
 import numpy as np
+from textwrap import dedent
 
 # for frontend-backend communication
 from posix_ipc import SharedMemory, ExistentialError
@@ -223,71 +224,166 @@ class recon_worker:
                         print(__loader__.name)
                         self.msg_export('[Warning]Another session of ptycho worker is running on this server or the previous worker didn\'t exit normally')
 
-def slurm_server_monitor(slurm_header = None):
-    if slurm_header is None:
-        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
-    while True:
-        l = None
-        try:
-            os.listdir(os.path.expanduser("~") + "/.ptycho_gui/")
-            with open(slurm_header,'r') as f:
-                l = f.readlines()[0].split()
-            os.remove(slurm_header)
-        except:
-            l = None
+class recon_worker_slurm:
+    def __init__(self,slurm_header = None):
+        self.base_dir = os.path.expanduser("~") + "/.ptycho_gui/"
+        if not os.path.exists(self.base_dir):
+            os.makedirs(self.base_dir)
 
-        if l is None:
-            print('Waiting for slurm task...')
-            time.sleep(3)
+        if slurm_header is None:
+            self.slurm_header = self.base_dir + "/.ptycho_slurm"
         else:
-            remote_config_path = l[0]
-            nthreads = l[1]
-            parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
-            srun_command = ["srun","--gpus="+nthreads, "--ntasks="+nthreads,\
-                            "bash","-c","source load-hxn; python -W ignore -m "+parent_module+".remote_worker_slurm "+remote_config_path]
+            self.slurm_header = slurm_header
+        self.slurm_exit_signal = self.base_dir + "/.ptycho_slurm_exit"
 
-            srun_command = set_flush_early(srun_command)
-            
-            print(srun_command)
-            
-            with subprocess.Popen(srun_command,
+        # Exit previously running monitor threads
+        try:
+            print('Sending exit signal to existing slurm monitor threads...')
+            os.listdir(self.base_dir)
+            with open(self.slurm_exit_signal,'w') as f:
+                f.write('EXIT')
+            time.sleep(2)
+            os.remove(self.slurm_exit_signal)
+        except:
+            pass
+
+        self.dot_count = 1
+        self.job_id = None
+        self.status = ''
+        
+    def exit(self,sig = None ,frame = None):
+        print('\nExit signal received.')
+        if self.job_id is not None:
+            print('Aborting running job / allocation...')
+            squeue_query_command = f"squeue -j {self.job_id} -h --format=%t".split()
+            self.status = subprocess.run(
+                squeue_query_command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            ).stdout.decode('utf-8').strip()
+            while self.status != '' and self.status != 'CG':
+                if self.status == 'PD':
+                    print(subprocess.run(['scancel',self.job_id],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    ).stdout.decode('utf-8').strip())
+                elif self.status == 'R':
+                    # Send abort to worker
+                    with open(os.path.join(self.remote_config_path,'abort'),'w') as f:
+                        pass
+                    if os.path.isfile(self.slurm_header):
+                        os.remove(self.slurm_header)
+                time.sleep(0.5)
+                self.status = subprocess.run(
+                    squeue_query_command,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                ).stdout.decode('utf-8').strip()
+        sys.exit(0)
+
+    def monitor(self):
+        while True:
+            l = None
+            try:
+                os.listdir(self.base_dir)
+                with open(self.slurm_header,'r') as f:
+                    l = f.readlines()[0].split()
+            except:
+                l = None
+
+            if l is None:
+                print(f'\rWaiting for slurm task{"." * self.dot_count}   ',end='')
+                # sys.stdout.write(f'\rWaiting for slurm task{"." * dot_count}   ')
+                # sys.stdout.flush()
+                self.dot_count = (self.dot_count)%3 + 1
+                time.sleep(0.5)
+
+                os.listdir(self.base_dir)
+                if os.path.isfile(self.slurm_exit_signal):
+                    os.remove(self.slurm_exit_signal)
+                    self.exit()
+            else:
+                self.remote_config_path = l[0]
+                nthreads = l[1]
+                parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
+                sbatch_script_path = self.base_dir + "/ptycho_slurm.sh"
+                sbatch_script = dedent(f'''
+                        #!/bin/bash
+                        #SBATCH --job-name=ptycho
+                        #SBATCH --qos=normal
+                        #SBATCH --time=0-03:00:00
+
+                        #SBATCH --ntasks-per-node={nthreads}
+                        #SBATCH --gres=gpu:{nthreads}
+
+                        #SBATCH --partition=normal
+                        #SBATCH --error={self.base_dir + "/.ptycho_slurm.err"}
+                        #SBATCH --output={self.base_dir + "/.ptycho_slurm.out"}
+                        source load-hxn
+                        python -W ignore -m {parent_module}.remote_worker_slurm {self.remote_config_path}
+                    ''').strip()
+                
+                with open(sbatch_script_path,'w') as f:
+                    f.write(sbatch_script)
+
+                sbatch_command = ["sbatch","--parsable",sbatch_script_path]
+                
+                print("")
+                print(sbatch_command)
+
+                self.job_id = subprocess.run(
+                    sbatch_command,
+                    stdout=subprocess.PIPE
+                ).stdout.decode('utf-8').strip()
+
+                print(f"Submitted batch job {self.job_id}")
+                time.sleep(1)
+
+                complete = False
+                squeue_query_command = f"squeue -j {self.job_id} -h --format=%t".split()
+                last_update = -10000
+
+                while not complete:
+                    time.sleep(0.5)
+                    self.status = subprocess.run(
+                        squeue_query_command,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    ).stdout.decode('utf-8').strip()
+
+                    if self.status == '':
+                        # Job doesn't exist anymore
+                        print(f"\nJob {self.job_id} is completed or aborted.")
+                        complete = True
+                        self.job_id = None
+                    elif self.status == 'PD':
+                        # Job is pending allocation, show the queue every 60 s
+                        if (time.time() - last_update)>60:
+                            print(subprocess.run('squeue',
                                 stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
-                                env=dict(os.environ, mpi_warn_on_fork='0')) as run_ptycho_slurm:
-
-                # idea: if we attempts to readline from an empty pipe, it will block until 
-                # at least one line is piped in. However, stderr is ususally empty, so reading
-                # from it is very likely to block the output until the subprocess ends, which 
-                # is bad. Thus, we want to set the O_NONBLOCK flag for stderr, see
-                # http://eyalarubas.com/python-subproc-nonblock.html 
-                #
-                # Note that it is unclear if readline in Python 3.5+ is guaranteed safe with 
-                # non-blocking pipes or not. See https://bugs.python.org/issue1175#msg56041 
-                # and https://stackoverflow.com/questions/375427/
-                # If this is a concern, using the asyncio module could be a safer approach?
-                # One could also process stdout in one loop and then stderr in another, which
-                # will not have the blocking issue.
-                flags = fcntl(run_ptycho_slurm.stdout, F_GETFL) # first get current stderr flags
-                fcntl(run_ptycho_slurm.stdout, F_SETFL, flags | O_NONBLOCK)
-                flags = fcntl(run_ptycho_slurm.stderr, F_GETFL) # first get current stderr flags
-                fcntl(run_ptycho_slurm.stderr, F_SETFL, flags | O_NONBLOCK)
-
-                while True:
-                    stdout = run_ptycho_slurm.stdout.readline()
-                    stderr = run_ptycho_slurm.stderr.readline() # without O_NONBLOCK this will very likely block
+                                stderr=subprocess.PIPE
+                            ).stdout.decode('utf-8'))
+                            print(f'Job {self.job_id} pending resource allocation... # squeue display updates every 60s #')
+                            last_update = time.time()
+                    elif self.status == 'R':
+                        if last_update < np.inf:
+                            print(f"\nJob {self.job_id} is running... # Output here refreshes slower than the GUI #")
+                            last_update = np.inf
+                        try:
+                            os.listdir(self.base_dir)
+                            with open(self.base_dir+'/.ptycho_slurm.out','r') as f:
+                                last_line = f.readlines()[-1].strip()
+                            print('\r' + last_line + '             ',end='')
+                        except:
+                            pass
                     
-                    if stdout:
-                        stdout = stdout.decode('utf-8')
-                        print(stdout.strip())
-
-                    if stderr:
-                        stderr = stderr.decode('utf-8')
-                        print(stderr.strip())
-
-                    if (run_ptycho_slurm.poll() is not None) and (stdout==b'') and (stderr==b''):
-                        break
-                    
-            time.sleep(1)
+                    os.listdir(self.base_dir)
+                    if os.path.isfile(self.slurm_exit_signal):
+                        os.remove(self.slurm_exit_signal)
+                        self.exit()
+                
+                if os.path.isfile(self.slurm_header):
+                    os.remove(self.slurm_header)
 
 
             
@@ -296,8 +392,9 @@ def main():
 
     if srv_name.startswith(SLURM_SERVER_NAME):
         print(f'{srv_name} is a slurm allocation server, running in slurm monitor mode...')
-        signal.signal(signal.SIGINT,sys.exit)
-        slurm_server_monitor()
+        r = recon_worker_slurm()
+        signal.signal(signal.SIGINT,r.exit)
+        r.monitor()
     else:
         r = recon_worker('.')
         signal.signal(signal.SIGINT,r.exit)

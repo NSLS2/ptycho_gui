@@ -33,13 +33,13 @@ class PtychoReconRemote(QtCore.QThread):
         if not os.path.isdir(self.remote_path):
             os.mkdir(self.remote_path)
 
-        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
-        if not os.path.isfile(self.msg_file):
-            with open(self.msg_file,'w') as f:
-                pass
-        self.msg = open(self.msg_file,'r')
-        self.msg.readlines()
+        if os.path.isfile(os.path.join(self.remote_path,'abort')):
+            os.remove(os.path.join(self.remote_path,'abort'))
 
+        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
+        with open(self.msg_file,'w') as f:
+            pass
+        self.msg = open(self.msg_file,'r')
     def _parse_message(self, tokens):
         def _parser(current, upper_limit, target_list):
             for j in range(upper_limit):
