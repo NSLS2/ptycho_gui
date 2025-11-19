@@ -175,7 +175,7 @@ class PtychoReconRemote(QtCore.QThread):
         else:
             # let preview window load results
             if self.param.preview_flag and self.return_value==0:
-                self.update_signal.emit(self.param.n_iterations+1,None)
+                self.update_signal.emit(-2,None)
             
         finally:
             if SLURM_SERVER_NAME != None and self.param.remote_srv.startswith(SLURM_SERVER_NAME):
@@ -428,20 +428,19 @@ class PtychoReconLive(QtCore.QThread):
         parent_module = '.'.join(self.__module__.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
         # "1" is just a placeholder to be overwritten soon
         if param.gpu_flag and len(param.gpus) == 1:
-            mpirun_command = ["python", "-W", "ignore", "-m",parent_module+".Holoptycho",self.config_file]
+            holoscan_command = ["python", "-W", "ignore", "-m",parent_module+".Holoptycho",self.config_file]
         else:
             raise NotImplementedError('Live recon on multiple gpus not implemented')
-        
-        mpirun_command = set_flush_early(mpirun_command)
 
         # for CuPy v8.0+
         os.environ['CUPY_ACCELERATORS'] = 'cub'
 
-        print(mpirun_command)
+        print(holoscan_command)
                 
         try:
             self.return_value = None
-            with subprocess.Popen(mpirun_command,
+            scan_percentage = 0
+            with subprocess.Popen(holoscan_command,
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE,
                                   env=dict(os.environ, mpi_warn_on_fork='0')) as run_ptycho:
@@ -497,8 +496,14 @@ class PtychoReconLive(QtCore.QThread):
                             update_fcn(-1, "init_mmap")
                         elif len(stdout) == 3 and stdout[0] == "flush" and update_fcn is not None:
                             update_fcn(-1, "flush")
+                            scan_percentage = 0
                         elif len(stdout) == 3 and stdout[0] == "reload" and update_fcn is not None:
                             update_fcn(-1, "reload")
+                        elif len(stdout) == 7 and stdout[0] == "Recv" and update_fcn is not None:
+                            per = int(stdout[4])*100.0/int(stdout[6])
+                            if per > scan_percentage:
+                                scan_percentage = per
+                                update_fcn(-100,scan_percentage)
 
                     if stderr:
                         stderr = stderr.decode('utf-8')

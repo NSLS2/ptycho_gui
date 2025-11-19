@@ -113,6 +113,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self._prb = None
         self._obj = None
         self._ptycho_gpu_thread = None
+        self._live_recon = False
+        self.scan_percentage = 0
+
         # self._worker_thread = None
         self._db = None             # hold the Broker instance that contains the info of the given scan id
         self._mds_table = None      # hold a Pandas.dataframe instance
@@ -509,8 +512,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def start_live(self):
         try:
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+
+            self._live_recon = True
             self.recon_bar.setValue(0)
-            self.recon_bar.setMaximum(self.param.n_iterations)
+            self.recon_bar.setMaximum(100)
 
             # at least one GPU needs to be selected
             if self.param.gpu_flag and len(self.param.gpus) == 0 and self.param.mpi_file_path == '':
@@ -533,7 +538,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
                 if self.reconStepWindow is None:
                     self.reconStepWindow = ReconStepWindow(*info)
-                self.reconStepWindow.reset_window(*info, iterations=self.param.n_iterations,
+                self.reconStepWindow.reset_window(*info, iterations=100,
                                                     slider_interval=self.param.display_interval)
                 self.reconStepWindow.show()
             else:
@@ -587,18 +592,18 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             traceback.print_exc()
             
     def stop_live(self):
+        self._live_recon = False
         if self._ptycho_gpu_thread is not None:
             self._ptycho_gpu_thread.kill() # first kill the mpi processes
             self._ptycho_gpu_thread.quit() # then quit QThread gracefully
             self._ptycho_gpu_thread = None
-
-        
 
     def start(self, batch_mode=False):
         if self._ptycho_gpu_thread is not None and self._ptycho_gpu_thread.isFinished():
             self._ptycho_gpu_thread = None
 
         if self._ptycho_gpu_thread is None:
+            self._live_recon = False
             working_directory = str(self.le_working_directory.text())
             h5_filename = working_directory + '/scan_' + str(self.sp_scan_num.value()) + '.h5'
             #if not self._loaded:
@@ -804,15 +809,27 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
     def update_recon_step(self, it, data=None):
         try:
-            self.recon_bar.setValue(it)
-
             if data == 'flush':
                 self.reconStepWindow.image_buffer = {}
                 self.reconStepWindow.current_max_iters = 1
+                self.recon_bar.setValue(0)
                 self.reset_at_next = True
+                return
+
+            if it == -100:
+                self.scan_percentage = data
+                self.recon_bar.setValue(int(np.round(self.scan_percentage)))
+                return
+
+            if it > 0 and not self._live_recon:
+                self.recon_bar.setValue(it)
+
 
             if self.reconStepWindow is not None:
-                self.reconStepWindow.update_iter(it)
+                if not self._live_recon:
+                    self.reconStepWindow.update_iter(it)
+                else:
+                    self.reconStepWindow.update_iter(it,self.scan_percentage)
 
                 if not _TEST and self.ck_preview_flag.isChecked():
                     try:
@@ -830,7 +847,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             except ExistentialError:
                                 # user may kill the process prematurely
                                 self.stop()
-                        elif it == self.param.n_iterations+1:
+                        elif it == -2: #self.param.n_iterations+1:
                             # reserve it=n_iterations+1 as the working space
                             self.reconStepWindow.current_max_iters = self.param.n_iterations
 
@@ -983,7 +1000,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             self.reconStepWindow.update_metric(it, data)
 
                     except: # when MPI processes are terminated, _prb and _obj are deleted and so not subscriptable 
-                        traceback.print_exc()
+                        # traceback.print_exc()
                         pass
                 else:
                     pass
