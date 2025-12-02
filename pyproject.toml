@@ -20,6 +20,13 @@ dynamic = ["version","dependencies"]
 [project.urls]
 Homepage = "https://github.com/NSLS2/ptycho_gui"
 
+[project.scripts]
+run-ptycho = "nsls2ptycho.ptycho_gui:main"
+run-ptycho-backend = "nsls2ptycho.core.ptycho.recon_ptycho_gui:main"
+run-ptycho-worker = "nsls2ptycho.remote_worker:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["nsls2ptycho*"]
+
+

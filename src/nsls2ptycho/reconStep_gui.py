@@ -149,9 +149,12 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
         self.sb_iter.setMaximum(1)
         self.sb_iter.setSingleStep(interval)
 
-    def update_iter(self, it):
+    def update_iter(self, it ,bar_percentage = None):
         """Called from outside"""
-        self.progressBar.setValue(it)
+        if bar_percentage is None:
+            self.progressBar.setValue(it)
+        else:
+            self.progressBar.setValue(int(np.round(bar_percentage)))
 
         if self.current_max_iters < it:
             self.slider_iters.setMaximum(it)
@@ -212,6 +215,7 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                 self.it_ondisplay = it
         except:
             traceback.print_exc()
+            pass
 
             
 

@@ -35,20 +35,25 @@ except ImportError:
 try:
     import cupy
 except ImportError:
-    print("CuPy not found. Will install...", file=sys.stderr)
-    try:
-        with os.popen('nvidia-smi') as stream:
-            nv_version = stream.read()
-        match = re.search(r'CUDA Version+:\s+(\d+\.+\d)',nv_version)
-        cuda_version = match.group(1)
-        print(f'Cuda version {cuda_version} detected')
-        cupy_package = 'cupy-cuda'+cuda_version.split('.')[0]+'x'
-        print(f'{cupy_package} will be installed')
-        REQUIREMENTS.append(cupy_package)
-    except:
-        print("\n************************************************************************\n"
-              "**** Unable to detect cuda version, please install cupy-cuda{version}x package manually to run GPU reconstruction. ****\n"
-              "************************************************************************\n", file=sys.stderr)
+     print("\n"
+           "****************************************************************************\n"
+           "**** Cupy package not found, please install:                        ********\n"
+           "**** cupy-cuda{version}x and numba-cuda[cu{version}] packages       ********\n"
+           "**** based on your CUDA library version to do GPU reconstruction.   ********\n"
+           "****************************************************************************\n", file=sys.stderr)
+#     try:
+#         with os.popen('nvidia-smi') as stream:
+#             nv_version = stream.read()
+#         match = re.search(r'CUDA Version+:\s+(\d+\.+\d)',nv_version)
+#         cuda_version = match.group(1)
+#         print(f'Cuda version {cuda_version} detected')
+#         cupy_package = 'cupy-cuda'+cuda_version.split('.')[0]+'x'
+#         print(f'{cupy_package} will be installed')
+#         REQUIREMENTS.append(cupy_package)
+#     except:
+#         print("\n************************************************************************\n"
+#               "**** Unable to detect cuda version, please install cupy-cuda{version}x package manually to run GPU reconstruction. ****\n"
+#               "************************************************************************\n", file=sys.stderr)
 
 # ...and then if numba exists
 try:

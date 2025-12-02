@@ -1,7 +1,9 @@
 import sys
 import os
+import getpass
 import random
 import time
+import uuid
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QFileDialog, QAction
 
@@ -52,8 +54,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         
         # connect
         self.btn_load_probe.clicked.connect(self.loadProbe)
+        self.btn_live_load_probe.clicked.connect(self.loadProbe)
         self.btn_load_object.clicked.connect(self.loadObject)
         self.ck_init_prb_flag.clicked.connect(self.resetProbeFlg)
+        self.ck_live_init_prb_flag.clicked.connect(self.resetProbeFlg)
         self.ck_init_obj_flag.clicked.connect(self.resetObjectFlg)
 
         self.btn_choose_cwd.clicked.connect(self.setWorkingDirectory)
@@ -99,6 +103,19 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.btn_MPI_file.clicked.connect(self.setMPIfile)
         self.le_gpus.textChanged.connect(self.resetMPIFlg)
 
+        self.connect_sps(self.sp_xray_energy,self.sp_live_energy)
+        self.connect_sps(self.sp_detector_distance,self.sp_live_det_distance)
+        self.connect_sps(self.sp_ccd_pixel_um,self.sp_live_ccd_pixel_um)
+        self.connect_sps(self.sp_batch_x0,self.sp_live_x0)
+        self.connect_sps(self.sp_batch_y0,self.sp_live_y0)
+        self.connect_sps(self.sp_batch_width,self.sp_live_width)
+        self.connect_sps(self.sp_batch_height,self.sp_live_height)
+        self.connect_sps(self.sp_prop_distance,self.sp_live_prop_distance)
+
+        self.connect_cks(self.ck_init_prb_flag,self.ck_live_init_prb_flag)
+
+        self.connect_les(self.le_prb_path,self.le_live_prb_path)
+
         # setup
         self.sp_pha_max.setMaximum(pi)
         self.sp_pha_max.setMinimum(-pi)
@@ -113,6 +130,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self._prb = None
         self._obj = None
         self._ptycho_gpu_thread = None
+        self.scan_percentage = 0
+
         # self._worker_thread = None
         self._db = None             # hold the Broker instance that contains the info of the given scan id
         self._mds_table = None      # hold a Pandas.dataframe instance
@@ -159,10 +178,11 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.setLoadButton()
 
         # generate a unique string for shared memory
+        self.param.uuid = str(uuid.uuid4())[:4]
         if sys.platform.startswith('darwin'): # OS X has a much shorter name limit
-            self.param.shm_name = os.getlogin()+'_'+str(os.getpid())+'_'+str(random.randrange(256))
+            self.param.shm_name = getpass.getuser()+'_'+str(os.getpid())+'_'+self.param.uuid
         else:
-            self.param.shm_name = 'ptycho_'+os.getlogin()+'_'+str(os.getpid())+'_'+str(random.randrange(256))
+            self.param.shm_name = 'ptycho_'+getpass.getuser()+'_'+str(os.getpid())+'_'+self.param.uuid
 
         # TODO: delete param.shm_name read in from previous config so that we can reset the buttons earlier
         self.resetButtons()
@@ -170,7 +190,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         # display GUI version
         self.setWindowTitle("NSLS-II Ptychography v" + __version__)
 
-
+    
     @property
     def db(self):
         # access the Broker instance; the name is probably not intuitive enough...?
@@ -181,6 +201,18 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def db(self, scan_id:int):
         # TODO: this should be configured based on selected beamline profile!
         self._db = db
+    
+    def connect_sps(self,sp1,sp2):
+        sp1.valueChanged.connect(lambda:sp2.setValue(sp1.value()))
+        sp2.valueChanged.connect(lambda:sp1.setValue(sp2.value()))
+
+    def connect_cks(self,ck1,ck2):
+        ck1.stateChanged.connect(lambda:ck2.setChecked(ck1.isChecked()))
+        ck2.stateChanged.connect(lambda:ck1.setChecked(ck2.isChecked()))
+
+    def connect_les(self,le1,le2):
+        le1.textChanged.connect(lambda:le2.setText(le1.text()))
+        le2.textChanged.connect(lambda:le1.setText(le2.text()))
 
 
     def resetButtons(self):
@@ -291,7 +323,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         # adv param group
         p.ccd_pixel_um = float(self.sp_ccd_pixel_um.value())
-        p.distance = float(self.sp_distance.value())
+        p.distance = float(self.sp_prop_distance.value())
         p.angle_correction_flag = self.ck_angle_correction_flag.isChecked()
         p.x_direction = float(self.sp_x_direction.value())
         p.y_direction = float(self.sp_y_direction.value())
@@ -348,6 +380,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p.batch_y0 = int(self.sp_batch_y0.value())
         p.batch_width = int(self.sp_batch_width.value())
         p.batch_height = int(self.sp_batch_height.value())
+
+        p.live_x_range_max = float(self.sp_live_x_range_max.value())
+        p.live_y_range_max = float(self.sp_live_y_range_max.value())
+        p.live_num_points_max = int(self.sp_live_num_points_max.value())
 
         p.batch_badpixel_file = self.le_batch_badpixel.text()
 
@@ -440,7 +476,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         # adv param group
         self.sp_ccd_pixel_um.setValue(p.ccd_pixel_um)
-        self.sp_distance.setValue(float(p.distance))
+        self.sp_prop_distance.setValue(float(p.distance))
         self.ck_angle_correction_flag.setChecked(p.angle_correction_flag)
         self.sp_x_direction.setValue(p.x_direction)
         self.sp_y_direction.setValue(p.y_direction)
@@ -500,6 +536,11 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.sp_batch_y0.setValue(p.batch_y0)
         self.sp_batch_width.setValue(p.batch_width)
         self.sp_batch_height.setValue(p.batch_height)
+
+        # Live recon
+        self.sp_live_x_range_max.setValue(p.live_x_range_max)
+        self.sp_live_y_range_max.setValue(p.live_y_range_max)
+        self.sp_live_num_points_max.setValue(p.live_num_points_max)
         
         self.le_batch_badpixel.setText(p.batch_badpixel_file)
 
@@ -509,8 +550,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def start_live(self):
         try:
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+
+            self.param.live_recon_flag = True
             self.recon_bar.setValue(0)
-            self.recon_bar.setMaximum(self.param.n_iterations)
+            self.recon_bar.setMaximum(100)
 
             # at least one GPU needs to be selected
             if self.param.gpu_flag and len(self.param.gpus) == 0 and self.param.mpi_file_path == '':
@@ -520,9 +563,21 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
             # this is needed because MPI processes need to know the working directory...
             if self.param.gpu_flag and len(self.param.gpus) == 1 and self.param.gpus[0] == 0:
-                save_config(self._config_path,self.param)
+                param_live = self.param
             else:
                 raise NotImplementedError('Live recon currently only runs on single GPU and only GPU 0.')
+            
+
+            param_live.x_range = self.sp_live_x_range_max.value()
+            param_live.y_range = self.sp_live_y_range_max.value()
+
+            param_live.nx = self.sp_batch_width.value()
+            param_live.ny = self.sp_batch_height.value()
+            param_live.nz = self.sp_live_num_points_max.value()
+            param_live.lambda_nm = 1.2398/self.sp_live_energy.value()
+
+
+            save_config(self._config_path,self.param)
 
             # init reconStepWindow
             if self.ck_preview_flag.isChecked():
@@ -533,7 +588,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
                 if self.reconStepWindow is None:
                     self.reconStepWindow = ReconStepWindow(*info)
-                self.reconStepWindow.reset_window(*info, iterations=self.param.n_iterations,
+                self.reconStepWindow.reset_window(*info, iterations=100,
                                                     slider_interval=self.param.display_interval)
                 self.reconStepWindow.show()
             else:
@@ -587,18 +642,18 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             traceback.print_exc()
             
     def stop_live(self):
+        self.param.live_recon_flag = False
         if self._ptycho_gpu_thread is not None:
             self._ptycho_gpu_thread.kill() # first kill the mpi processes
             self._ptycho_gpu_thread.quit() # then quit QThread gracefully
             self._ptycho_gpu_thread = None
-
-        
 
     def start(self, batch_mode=False):
         if self._ptycho_gpu_thread is not None and self._ptycho_gpu_thread.isFinished():
             self._ptycho_gpu_thread = None
 
         if self._ptycho_gpu_thread is None:
+            self.param.live_recon_flag = False
             working_directory = str(self.le_working_directory.text())
             h5_filename = working_directory + '/scan_' + str(self.sp_scan_num.value()) + '.h5'
             #if not self._loaded:
@@ -804,15 +859,27 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
     def update_recon_step(self, it, data=None):
         try:
-            self.recon_bar.setValue(it)
-
             if data == 'flush':
                 self.reconStepWindow.image_buffer = {}
                 self.reconStepWindow.current_max_iters = 1
+                self.recon_bar.setValue(0)
                 self.reset_at_next = True
+                return
+
+            if it == -100:
+                self.scan_percentage = data
+                self.recon_bar.setValue(int(np.round(self.scan_percentage)))
+                return
+
+            if it > 0 and not self.param.live_recon_flag:
+                self.recon_bar.setValue(it)
+
 
             if self.reconStepWindow is not None:
-                self.reconStepWindow.update_iter(it)
+                if not self.param.live_recon_flag:
+                    self.reconStepWindow.update_iter(it)
+                else:
+                    self.reconStepWindow.update_iter(it,self.scan_percentage)
 
                 if not _TEST and self.ck_preview_flag.isChecked():
                     try:
@@ -830,7 +897,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             except ExistentialError:
                                 # user may kill the process prematurely
                                 self.stop()
-                        elif it == self.param.n_iterations+1:
+                        elif it == -2: #self.param.n_iterations+1:
                             # reserve it=n_iterations+1 as the working space
                             self.reconStepWindow.current_max_iters = self.param.n_iterations
 
@@ -840,6 +907,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             work_dir = p.working_directory
                             scan_num = str(p.scan_num)
                             data_dir = os.path.join(work_dir,'recon_result/S'+scan_num+'/'+p.sign+'/recon_data/')
+                            os.listdir(data_dir) # To refresh?
                             data = {}
                             images = []
 
@@ -922,7 +990,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
                                 self.reconStepWindow.result_type_num = 2
                                 
-                            self.reconStepWindow.update_images(it, images)
+                            self.reconStepWindow.update_images(self.param.n_iterations+1, images)
                         elif (it-1) % self.param.display_interval == 0 and not self.param.remote_srv:
                             if self.reset_at_next:
                                 self.reconStepWindow.reset_figs()
@@ -953,8 +1021,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         elif (it-1) % self.param.display_interval == 0 and self.param.remote_srv:
                             if self.it_last - it < self.param.display_interval:
                                 tnow = time.time()
-                                prb_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+os.getlogin(),'prb_live.npy')
-                                obj_live_file = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+os.getlogin(),'obj_live.npy')
+                                live_path = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+getpass.getuser())
+                                os.listdir(live_path)
+                                prb_live_file = os.path.join(live_path,f'prb_live{self.param.uuid}.npy')
+                                obj_live_file = os.path.join(live_path,f'obj_live{self.param.uuid}.npy')
                                 while (time.time()-tnow)<5:
                                     if os.path.exists(prb_live_file) and os.path.getsize(prb_live_file)>0 and os.path.exists(obj_live_file) and os.path.getsize(obj_live_file)>0:
                                     #time.sleep(1) # wait for the npy files in file system
@@ -1005,7 +1075,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             prb_dir = filename[:(len(filename)-len(prb_filename))]
             self.param.set_prb_path(prb_dir, prb_filename)
             self.le_prb_path.setText(prb_filename)
-            self.sp_distance.setValue(0)
+            self.sp_prop_distance.setValue(0)
             self.ck_init_prb_flag.setChecked(False)
 
 
@@ -1334,7 +1404,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             print("[BATCH] begin processing scan " + str(scan_num) + "...")
             self.sp_scan_num.setValue(scan_num)
             if prop_dist:
-                self.sp_distance.setValue(prop_dist)
+                self.sp_prop_distance.setValue(prop_dist)
 
             if self.ck_batch_crop_flag.isChecked():
                 self._batch_crop()  # also handles "Run" if needed
@@ -1792,8 +1862,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             print("config saved to " + filename)
 
     def resetExperimentalParameters(self):
-        self.sp_xray_energy.setValue(0)
-        self.sp_detector_distance.setValue(0)
+        # self.sp_xray_energy.setValue(0)
+        # self.sp_detector_distance.setValue(0)
         self.sp_x_arr_size.setValue(0)
         self.sp_y_arr_size.setValue(0)
         self.sp_x_step_size.setValue(0)
