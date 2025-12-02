@@ -246,9 +246,10 @@ class recon_worker_slurm:
             os.makedirs(self.base_dir)
 
         if slurm_header is None:
-            self.slurm_header = self.base_dir + "/.ptycho_slurm_job"
+            self.slurm_header = self.base_dir + "/.ptycho_slurm_job%s"
         else:
             self.slurm_header = slurm_header
+        self.sbatch_header = self.base_dir + f"/ptycho_slurm%s.sh"
         self.slurm_exit_signal = self.base_dir + "/.ptycho_slurm_exit"
 
         # Exit previously running monitor threads
@@ -264,6 +265,19 @@ class recon_worker_slurm:
 
         self.dot_count = 1
         self.job_list = []
+    
+    def clear_slurm_headers(self,uuid):
+        if os.path.isfile(self.slurm_header%uuid):
+            try:
+                os.remove(self.slurm_header%uuid)
+            except:
+                pass
+        if os.path.isfile(self.sbatch_header%uuid):
+            try:
+                os.remove(self.sbatch_header%uuid)
+            except:
+                pass
+
         
     def exit(self,sig = None ,frame = None):
         print('\nExit signal received.')
@@ -271,11 +285,7 @@ class recon_worker_slurm:
             self.query_jobs()
             for i in range(len(self.job_list)-1,-1,-1): # Iterate in reverse order to pop correctly
                 job = self.job_list[i]
-                if os.path.isfile(self.slurm_header+job['uuid']):
-                    try:
-                        os.remove(self.slurm_header+job['uuid'])
-                    except:
-                        pass
+                self.clear_slurm_headers(job['uuid'])
                 if job['status'] == '' or job['status'] == 'CG':
                     self.job_list.pop(i)
                 elif job['status'] == 'PD':
@@ -286,7 +296,7 @@ class recon_worker_slurm:
                     ).stdout.decode('utf-8').strip())
                 elif job['status'] == 'R':
                     # Send abort to worker
-                    with open(os.path.join(self.remote_config_path,'abort'),'w') as f:
+                    with open(os.path.join(self.remote_config_path,'abort'+job['uuid']),'w') as f:
                         pass
             time.sleep(0.5)
         sys.exit(0)
@@ -296,14 +306,14 @@ class recon_worker_slurm:
             with open(fname,'r') as f:
                 l = f.readlines()[0].split()
         except:
-            l = None
+            return None
 
         if l is not None:
             uuid = fname[-4:]
             self.remote_config_path = l[0]
             nthreads = l[1]
             parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
-            sbatch_script_path = self.base_dir + f"/ptycho_slurm{uuid}.sh"
+            sbatch_script_path = self.sbatch_header%uuid
             sbatch_script = dedent(f'''
                     #!/bin/bash
                     #SBATCH --job-name=ptycho
@@ -335,6 +345,10 @@ class recon_worker_slurm:
 
             self.job_list.append({'uuid':uuid,'jobid':jobid,'status':'PD'})
 
+            return jobid
+        else:
+            return None
+
     def query_jobs(self):
         for job in self.job_list:
             squeue_query_command = f"squeue -j {job['jobid']} -h --format=%t".split()
@@ -351,10 +365,11 @@ class recon_worker_slurm:
             for fname in flist:
                 uuid = fname[-4:]
                 if not any(job['uuid'] == uuid for job in self.job_list):
-                    self.new_sbatch_job(fname)
+                    jid = self.new_sbatch_job(os.path.join(self.base_dir,fname))
 
-                    print(f"Submitted batch job {self.job_list[-1]['jobid']}")
-                    time.sleep(1)
+                    if jid is not None:
+                        print(f"Submitted batch job {self.job_list[-1]['jobid']}")
+                        time.sleep(1)
             
             self.query_jobs()
 
@@ -368,11 +383,7 @@ class recon_worker_slurm:
                 for i in range(len(self.job_list)-1,-1,-1): # Iterate in reverse order to pop correctly
                     job = self.job_list[i]
                     if job['status'] == '' or job['status'] == 'CG': # Complete
-                        if os.path.isfile(self.slurm_header+job['uuid']):
-                            try:
-                                os.remove(self.slurm_header+job['uuid'])
-                            except:
-                                pass
+                        self.clear_slurm_headers(job['uuid'])
                         self.job_list.pop(i)
                     elif job['status'] == 'PD': # Pending allocation
                         n_pending += 1
@@ -389,14 +400,14 @@ class recon_worker_slurm:
                     print(f'{"." * self.dot_count}   ',end='')
                     self.dot_count = (self.dot_count)%3 + 1
                     
-                    # Show the queue every 30 s
-                    if (time.time() - last_update)>30:
-                        print(subprocess.run('squeue',
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE
-                        ).stdout.decode('utf-8'))
-                        print('# squeue display updates every 30s #')
-                        last_update = time.time()
+            # Show the queue every 30 s
+            if (time.time() - last_update)>30:
+                print(subprocess.run('squeue',
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                ).stdout.decode('utf-8'))
+                print('# squeue display updates every 30s #')
+                last_update = time.time()
             time.sleep(0.5)
                         
             os.listdir(self.base_dir)
