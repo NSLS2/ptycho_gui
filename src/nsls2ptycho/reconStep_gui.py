@@ -214,7 +214,7 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                 
                 self.it_ondisplay = it
         except:
-            # traceback.print_exc()
+            traceback.print_exc()
             pass
 
             

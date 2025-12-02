@@ -1,7 +1,7 @@
 from PyQt5 import QtCore
 from datetime import datetime
 from .ptycho_param import Param
-import sys, os
+import sys, os, getpass
 import pickle     # dump param into disk
 import subprocess # call mpirun from shell
 from fcntl import fcntl, F_GETFL, F_SETFL
@@ -26,17 +26,18 @@ class PtychoReconRemote(QtCore.QThread):
         super().__init__(parent)
         self.parent = parent
         self.param = param
+        self.uuid = param.uuid
 
         self.return_value = None
 
-        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+os.getlogin())
+        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+getpass.getuser())
         if not os.path.isdir(self.remote_path):
             os.mkdir(self.remote_path)
 
         if os.path.isfile(os.path.join(self.remote_path,'abort')):
             os.remove(os.path.join(self.remote_path,'abort'))
 
-        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
+        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'+self.uuid))
         with open(self.msg_file,'w') as f:
             pass
         self.msg = open(self.msg_file,'r')
@@ -92,12 +93,12 @@ class PtychoReconRemote(QtCore.QThread):
         return stdout_2.split()
 
     def export_slurm_header(self):
-        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.param.uuid
         with open(slurm_header, 'w') as f:
             f.write(self.remote_path+' '+str(len(self.param.gpus))+'\n')
 
     def clear_slurm_header(self):
-        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm"
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.param.uuid
         if os.path.exists(slurm_header):
             try:
                 os.remove(slurm_header)
@@ -106,7 +107,7 @@ class PtychoReconRemote(QtCore.QThread):
     
     def recon_remote(self, param:Param, update_fcn=None):
 
-        self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign)
+        self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign+self.uuid)
         
         if param.working_directory:
             param.working_directory = os.path.realpath(param.working_directory)+'/'
@@ -132,10 +133,10 @@ class PtychoReconRemote(QtCore.QThread):
             print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
             time.sleep(1)
             out = self.msg.readlines()
-            if os.path.isfile(os.path.join(self.remote_path,'abort')):
-                os.remove(os.path.join(self.remote_path,'abort'))
-                if os.path.isfile(os.path.join(self.remote_path,'msg')):
-                    os.remove(os.path.join(self.remote_path,'msg'))
+            if os.path.isfile(os.path.join(self.remote_path,'abort'+self.uuid)):
+                os.remove(os.path.join(self.remote_path,'abort'+self.uuid))
+                if os.path.isfile(os.path.join(self.remote_path,'msg'+self.uuid)):
+                    os.remove(os.path.join(self.remote_path,'msg'+self.uuid))
                 if os.path.isfile(self.fname_full):
                     os.remove(self.fname_full)
                 raise Exception('Remote recon aborted...')
@@ -184,8 +185,13 @@ class PtychoReconRemote(QtCore.QThread):
 
     def kill(self):
         if os.path.isdir(self.remote_path):
-            with open(os.path.join(self.remote_path,'abort'),'w') as f:
+            with open(os.path.join(self.remote_path,'abort'+self.uuid),'w') as f:
                 pass
+        try:
+            if os.path.isfile(os.path.join(os.path.join(self.remote_path,'msg'+self.uuid))):
+                os.remove(os.path.join(os.path.join(self.remote_path,'msg'+self.uuid)))
+        except:
+            pass
 
 class PtychoReconWorker(QtCore.QThread):
     update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)
