@@ -1,7 +1,7 @@
 from PyQt5 import QtCore
 from datetime import datetime
 from .ptycho_param import Param
-import sys, os, getpass
+import sys, os, getpass, uuid
 import pickle     # dump param into disk
 import subprocess # call mpirun from shell
 from fcntl import fcntl, F_GETFL, F_SETFL
@@ -19,6 +19,67 @@ try:
 except:
     SLURM_SERVER_NAME = None
 
+class PtychoReconSlurmQueue:
+    def __init__(self, param:Param=None, n_parallel = 3):
+        self.n_parallel = n_parallel
+        self.uuid = str(uuid.uuid4())[:4]
+        param.uuid = self.uuid
+        self.param = param
+        # Needs a random uuid
+
+        self.return_value = None
+
+        self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+getpass.getuser())
+        if not os.path.isdir(self.remote_path):
+            os.mkdir(self.remote_path)
+
+        if os.path.isfile(os.path.join(self.remote_path,'abort'+self.uuid)):
+            os.remove(os.path.join(self.remote_path,'abort'+self.uuid))
+
+        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'+self.uuid))
+        with open(self.msg_file,'w') as f:
+            pass
+
+    def export_slurm_header(self):
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.uuid
+        with open(slurm_header, 'w') as f:
+            f.write(self.remote_path+' '+str(len(self.param.gpus))+' '+str(self.n_parallel)+'\n')
+
+    def clear(self):
+        flist = [f for f in os.listdir(os.path.join(os.path.expanduser("~"),".ptycho_gui")) if f.startswith('.ptycho_slurm_job')]
+        for fname in flist:
+            try:
+                os.remove(os.path.join(os.path.expanduser("~"),".ptycho_gui",fname))
+            except:
+                pass
+        flist = [f for f in os.listdir(os.path.join(os.path.expanduser("~"),".ptycho_gui")) if f.startswith('ptycho_slurm') and f.endswith('sh')]
+        for fname in flist:
+            try:
+                os.remove(os.path.join(os.path.expanduser("~"),".ptycho_gui",fname))
+            except:
+                pass
+
+    def send(self):
+        self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(self.param.scan_num)+'_'+self.param.sign+self.uuid)
+        
+        if self.param.working_directory:
+            self.param.working_directory = os.path.realpath(self.param.working_directory)+'/'
+        if self.param.prb_dir:
+            self.param.prb_dir = os.path.realpath(self.param.prb_dir)+'/'
+        if self.param.prb_path:
+            self.param.prb_path = os.path.realpath(self.param.prb_path)
+        if self.param.obj_dir:
+            self.param.obj_dir = os.path.realpath(self.param.obj_dir)+'/'
+        if self.param.obj_path:
+            self.param.obj_path = os.path.realpath(self.param.obj_path)
+        
+        save_config(self.fname_full,self.param)
+
+        if SLURM_SERVER_NAME != None and self.param.remote_srv.startswith(SLURM_SERVER_NAME): # Should always be true
+            self.export_slurm_header()
+
+
+
 class PtychoReconRemote(QtCore.QThread):
     update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)
 
@@ -34,8 +95,8 @@ class PtychoReconRemote(QtCore.QThread):
         if not os.path.isdir(self.remote_path):
             os.mkdir(self.remote_path)
 
-        if os.path.isfile(os.path.join(self.remote_path,'abort')):
-            os.remove(os.path.join(self.remote_path,'abort'))
+        if os.path.isfile(os.path.join(self.remote_path,'abort'+self.uuid)):
+            os.remove(os.path.join(self.remote_path,'abort'+self.uuid))
 
         self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'+self.uuid))
         with open(self.msg_file,'w') as f:
@@ -93,12 +154,12 @@ class PtychoReconRemote(QtCore.QThread):
         return stdout_2.split()
 
     def export_slurm_header(self):
-        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.param.uuid
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.uuid
         with open(slurm_header, 'w') as f:
             f.write(self.remote_path+' '+str(len(self.param.gpus))+'\n')
 
     def clear_slurm_header(self):
-        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.param.uuid
+        slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.uuid
         if os.path.exists(slurm_header):
             try:
                 os.remove(slurm_header)
@@ -129,8 +190,9 @@ class PtychoReconRemote(QtCore.QThread):
         # try:
         time.sleep(1)
         out = self.msg.readlines()
+
         while not out:
-            print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
+            print(f'Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
             time.sleep(1)
             out = self.msg.readlines()
             if os.path.isfile(os.path.join(self.remote_path,'abort'+self.uuid)):
