@@ -23,10 +23,11 @@ class recon_worker:
         self.abort_recon()
         sys.exit(0)
     
-    def __init__(self,monitor_path,timeout):
+    def __init__(self,monitor_path,timeout,uuid=''):
         self.monitor_path = monitor_path
         self.timeout = timeout
-        self.uuid = ''
+        self.uuid = uuid
+        self.uuid_search = uuid
         self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'+self.uuid))
         self.fname = None
         self.fname_full = None
@@ -94,6 +95,10 @@ class recon_worker:
             os.remove(os.path.join(self.monitor_path,f'prb_live{self.uuid}.npy'))
         if os.path.exists(os.path.join(self.monitor_path,f'obj_live{self.uuid}.npy')):
             os.remove(os.path.join(self.monitor_path,f'obj_live{self.uuid}.npy'))
+        if os.path.exists(os.path.join(self.monitor_path,f'msg{self.uuid}')):
+            os.remove(os.path.join(self.monitor_path,f'msg{self.uuid}'))
+        if os.path.exists(os.path.join(self.monitor_path,f'abort{self.uuid}')):
+            os.remove(os.path.join(self.monitor_path,f'abort{self.uuid}'))
 
         
     def abort_recon(self):
@@ -217,7 +222,7 @@ class recon_worker:
                 self.dot_count = (self.dot_count)%3 + 1
                 time.sleep(0.5)
             else:
-                flist = [f for f in os.listdir(self.monitor_path) if f.startswith('ptycho')]
+                flist = [f for f in os.listdir(self.monitor_path) if f.startswith('ptycho') and f.endswith(self.uuid_search)]
                 if not flist:
                     print(f'\r[Worker]Recon folder is empty, waiting for task{"." * self.dot_count}   ',end='')
                     self.dot_count = (self.dot_count)%3 + 1
@@ -301,53 +306,41 @@ class recon_worker_slurm:
             time.sleep(0.5)
         sys.exit(0)
     
-    def new_sbatch_job(self,fname):
-        try:
-            with open(fname,'r') as f:
-                l = f.readlines()[0].split()
-        except:
-            return None
+    def new_sbatch_job(self,uuid,nthreads):
+        parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
+        sbatch_script_path = self.sbatch_header%uuid
+        sbatch_script = dedent(f'''
+                #!/bin/bash
+                #SBATCH --job-name=ptycho
+                #SBATCH --qos=normal
+                #SBATCH --time=0-03:00:00
 
-        if l is not None:
-            uuid = fname[-4:]
-            self.remote_config_path = l[0]
-            nthreads = l[1]
-            parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
-            sbatch_script_path = self.sbatch_header%uuid
-            sbatch_script = dedent(f'''
-                    #!/bin/bash
-                    #SBATCH --job-name=ptycho
-                    #SBATCH --qos=normal
-                    #SBATCH --time=0-03:00:00
+                #SBATCH --ntasks-per-node={nthreads}
+                #SBATCH --gres=gpu:{nthreads}
 
-                    #SBATCH --ntasks-per-node={nthreads}
-                    #SBATCH --gres=gpu:{nthreads}
+                #SBATCH --partition=normal
+                #SBATCH --error={self.base_dir + "/.ptycho_slurm.err"}
+                #SBATCH --output={self.base_dir + "/.ptycho_slurm.out"}
+                source load-hxn
+                python -W ignore -m {parent_module}.remote_worker {self.remote_config_path} 5  {uuid} # <monitor_path> <timeout> <uuid>
+            ''').strip()
+        
+        with open(sbatch_script_path,'w') as f:
+            f.write(sbatch_script)
 
-                    #SBATCH --partition=normal
-                    #SBATCH --error={self.base_dir + "/.ptycho_slurm.err"}
-                    #SBATCH --output={self.base_dir + "/.ptycho_slurm.out"}
-                    source load-hxn
-                    python -W ignore -m {parent_module}.remote_worker {self.remote_config_path} 5 # <monitor_path> <timeout>
-                ''').strip()
-            
-            with open(sbatch_script_path,'w') as f:
-                f.write(sbatch_script)
+        sbatch_command = ["sbatch","--parsable",sbatch_script_path]
+        
+        print("")
+        print(sbatch_command)
 
-            sbatch_command = ["sbatch","--parsable",sbatch_script_path]
-            
-            print("")
-            print(sbatch_command)
+        jobid = subprocess.run(
+            sbatch_command,
+            stdout=subprocess.PIPE
+        ).stdout.decode('utf-8').strip()
 
-            jobid = subprocess.run(
-                sbatch_command,
-                stdout=subprocess.PIPE
-            ).stdout.decode('utf-8').strip()
+        self.job_list.append({'uuid':uuid,'jobid':jobid,'status':'PD'})
 
-            self.job_list.append({'uuid':uuid,'jobid':jobid,'status':'PD'})
-
-            return jobid
-        else:
-            return None
+        return jobid
 
     def query_jobs(self):
         for job in self.job_list:
@@ -362,19 +355,30 @@ class recon_worker_slurm:
         last_update = -10000
         while True:
             flist = [f for f in os.listdir(self.base_dir) if f.startswith('.ptycho_slurm_job')]
+            n_queue = 0
             for fname in flist:
                 uuid = fname[-4:]
                 if not any(job['uuid'] == uuid for job in self.job_list):
-                    jid = self.new_sbatch_job(os.path.join(self.base_dir,fname))
-
-                    if jid is not None:
-                        print(f"Submitted batch job {self.job_list[-1]['jobid']}")
-                        time.sleep(1)
+                    try:
+                        with open(os.path.join(self.base_dir,fname),'r') as f:
+                            l = f.readlines()[0].split()
+                    except:
+                        l = None
+                    if l is not None:
+                        if len(l)>2 and int(l[2]) <= len(self.job_list): # Queued slurm jobs, control the number of parallel processes
+                            n_queue += 1
+                        else:
+                            self.remote_config_path = l[0]
+                            jid = self.new_sbatch_job(uuid,l[1])
+                            if jid is not None:
+                                print(f"Submitted batch job {uuid} jobid {self.job_list[-1]['jobid']}")
+                                last_update = -10000 # Force update
+                                time.sleep(1)
             
             self.query_jobs()
 
             if len(self.job_list) == 0:
-                print(f'\rWaiting for slurm task{"." * self.dot_count}   ',end='')
+                print(f'\rWaiting for slurm task{"." * self.dot_count}            ',end='')
                 self.dot_count = (self.dot_count)%3 + 1
             else:
                 n_running = 0
@@ -395,13 +399,16 @@ class recon_worker_slurm:
                     if n_running > 0 :
                         print(f' {n_running} job running',end='')
                     if n_pending > 0 :
-                        print(f' {n_running} job pending allocation',end='')
+                        print(f' {n_pending} job pending allocation',end='')
+                    if n_queue > 0 :
+                        print(f' {n_queue} job in the queue',end='')
                     
-                    print(f'{"." * self.dot_count}   ',end='')
+                    print(f'{"." * self.dot_count}                  ',end='')
                     self.dot_count = (self.dot_count)%3 + 1
                     
             # Show the queue every 30 s
             if (time.time() - last_update)>30:
+                print('')
                 print(subprocess.run('squeue',
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
@@ -433,11 +440,15 @@ def main():
             timeout = None
         else: # First argument is monitor_path
             monitor_path = sys.argv[1]
-            if len(sys.argv) == 3: # Second argument is timeout time in second
+            if len(sys.argv) > 2: # Second argument is timeout time in second
                 timeout = int(sys.argv[2])
             else:
                 timeout = None
-        r = recon_worker(monitor_path,timeout)
+            if len(sys.argv) > 3: # Third argument is the uuid
+                uuid = str(sys.argv[3])
+            else:
+                uuid = ''
+        r = recon_worker(monitor_path,timeout,uuid)
         signal.signal(signal.SIGINT,r.exit)
         r.monitor()
 

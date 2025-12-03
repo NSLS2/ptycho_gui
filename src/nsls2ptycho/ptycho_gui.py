@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import QFileDialog, QAction
 from .ui import ui_ptycho
 from .core.utils import clean_shared_memory, get_mpi_num_processes, parse_range2
 from .core.ptycho_param import Param
-from .core.ptycho_recon import PtychoReconWorker,PtychoReconRemote, PtychoReconLive, PtychoReconFakeWorker, HardWorker
+from .core.ptycho_recon import PtychoReconWorker,PtychoReconRemote, PtychoReconLive, PtychoReconFakeWorker, PtychoReconSlurmQueue
 from .core.ptycho_qt_utils import PtychoStream
 from .core.widgets.list_widget import ListWidget
 from .core.widgets.mplcanvas import load_image_pil
@@ -88,6 +88,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         self.btn_recon_start.clicked.connect(self.start)
         self.btn_recon_stop.clicked.connect(self.stop)
+
+        self.btn_recon_batch_submit_queue.clicked.connect(self.batchSlurmSubmit)
+        self.btn_recon_batch_clear_queue.clicked.connect(self.batchSlurmClear)
+
         self.btn_recon_batch_start.clicked.connect(self.batchStart)
         self.btn_recon_batch_stop.clicked.connect(self.batchStop)
 
@@ -647,6 +651,19 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self._ptycho_gpu_thread.kill() # first kill the mpi processes
             self._ptycho_gpu_thread.quit() # then quit QThread gracefully
             self._ptycho_gpu_thread = None
+    
+    def send_to_slurm_queue(self):
+        self.param.live_recon_flag = False
+        working_directory = str(self.le_working_directory.text())
+        h5_filename = working_directory + '/scan_' + str(self.sp_scan_num.value()) + '.h5'
+        if not self._loaded or not os.path.exists(h5_filename):
+            print(f"[Warning] Error processing scan {self.sp_scan_num.value()} to send it to slurm queue")
+            return
+        
+        self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+
+        snd = PtychoReconSlurmQueue(self.param,int(self.sp_slurm_n_parallel.value()))
+        snd.send()
 
     def start(self, batch_mode=False):
         if self._ptycho_gpu_thread is not None and self._ptycho_gpu_thread.isFinished():
@@ -1271,6 +1288,58 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.param.mpi_file_path = ''
         self.le_MPI_file_path.setText('')
 
+    def batchSlurmClear(self):
+        ans = QtWidgets.QMessageBox.question(self, "Warning", f"Will remove all slurm jobs in the queue.\nAre you sure?")
+        if ans == QtWidgets.QMessageBox.Yes:
+            self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+
+            snd = PtychoReconSlurmQueue(self.param)
+            snd.clear()
+
+    def batchSlurmSubmit(self):
+        from .remote_worker import SLURM_SERVER_NAME
+        if self.le_remote_srv.text().strip() != SLURM_SERVER_NAME:
+            QtWidgets.QMessageBox.warning(self, "Error", f'Batch submit can only be used when remote_srv is set to slurm server "{SLURM_SERVER_NAME}".')
+            return
+        if self.ck_batch_track.isChecked():
+            QtWidgets.QMessageBox.warning(self, "Error", f'Batch submit cannot be used for ongoing scan, uncheck the "Ongoing scan" checkbox.')
+            return
+        if not self.ck_batch_run_flag.isChecked():
+            QtWidgets.QMessageBox.warning(self, "Error", f'Batch submit cannot submit any jobs if "Run reconstruction" is unchecked.')
+            return
+
+        self._load_batch_scans()
+        scan_num,prop_dist = self._roll_next_scannum()
+        ntotal = len(self._scan_numbers) + (1 if scan_num != None else 0)
+
+        if ntotal == 0:
+            QtWidgets.QMessageBox.warning(self, "Error", f'Cannot load any scannums for batch processing.')
+            return
+        else:
+            ans = QtWidgets.QMessageBox.question(self, "Warning", f"Will send {ntotal} scans to slurm queue configured to run {self.sp_slurm_n_parallel.value()} processes in parallel. \nIt is recommended to monitor the slurm worker thread while recon is running in the background. \nAre you sure?")
+            if ans == QtWidgets.QMessageBox.Yes:
+                while scan_num is not None:
+                    self.sp_scan_num.setValue(scan_num)
+                    if prop_dist is not None:
+                        self.sp_prop_distance.setValue(prop_dist)
+
+                    print(f"Loading scan {scan_num} for slurm submission...")
+                    if self.ck_batch_crop_flag.isChecked():
+                        self.crop_scan()
+                    else:
+                        self.cb_dataloader.setCurrentIndex(0)
+                        self.loadExpParam()
+                    try:
+                        if self.ck_batch_run_flag.isChecked():
+                            self.send_to_slurm_queue()
+
+                        scan_num,prop_dist = self._roll_next_scannum()
+                    except Exception as ex:
+                        self.exception_handler(ex)
+                    
+                QtWidgets.QMessageBox.information(self,"Info",f"Sent {ntotal} scans to slurm queue, check the slurm worker thread for progress.")
+                self._scan_numbers = None
+
 
     def batchStart(self):
         if not self.ck_batch_crop_flag.isChecked() and not self.ck_batch_run_flag.isChecked():
@@ -1283,22 +1352,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                     "[WARNING] Will attempt to load h5 from working directory", file=sys.stderr)
         
         try:
-            if self.le_batch_items.text() == '':
-                self._scan_numbers = [-1]
-            elif (self.le_batch_items.text()[0]=='/'):
-                self._scan_numbers = None
-                self._track_file = self.le_batch_items.text()
-                print('Loading scan numbers from %s...'%self._track_file)
-            else:
-                self._scan_numbers = parse_range2(self.le_batch_items.text())
-                print(self._scan_numbers)
-            # TODO: is there a way to lock all widgets to prevent accidental parameter changes in the middle?
-
-            # fire up
-            # try:
-            #     self.sp_scan_num.valueChanged.disconnect(self.forceLoad)
-            # except:
-            #     pass
+            self._load_batch_scans()
             self._batch_manager() # serve as linked list's head
         except Exception as ex:
             self.exception_handler(ex)
@@ -1321,18 +1375,28 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self.roiWindow = None
         self.resetButtons()
         self._batch_stopped = True
+    
+    def _load_batch_scans(self):
+        if self.le_batch_items.text() == '':
+            self._scan_numbers = []
+        elif (self.le_batch_items.text()[0]=='/'):
+            self._scan_numbers = None
+            self._track_file = self.le_batch_items.text()
+            print('Loading scan numbers from %s...'%self._track_file)
+        else:
+            self._scan_numbers = parse_range2(self.le_batch_items.text())
 
-
-    def _batch_manager(self):
-        '''
-        This is a "linked list" that utilizes Qt's signal mechanism to retrieve the next item in the list
-        when the current item is processed. We need this because most likely the users want to put all
-        available computing resources to process the batch item by item, and having more than one worker
-        is not helping.
-        '''
-        
-        self.btn_recon_batch_start.setEnabled(False)
-        self.btn_recon_batch_stop.setEnabled(True)
+            # Skip existing
+            if self.ck_batch_skip_exist.isChecked():
+                work_dir = str(self.le_working_directory.text())
+                suffix = str(self.le_sign.text())
+                for i in range(len(self._scan_numbers)-1,-1,-1):
+                    snum = self._scan_numbers[i]
+                    if os.path.exists(work_dir+'./recon_result/S'+str(snum)+'/'+suffix):
+                        self._scan_numbers.pop(i)
+            print(self._scan_numbers)
+    
+    def _roll_next_scannum(self):
         if not self._scan_numbers:
             try:
                 if not self.ck_batch_track.isChecked():
@@ -1378,9 +1442,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                                 except:
                                     pass
                         if scan_num is None:
-                            print("[BATCH] all scans in the list have been reconstructed, pausing 5 seconds...")
-                            for i in range(10):
-                                time.sleep(0.5)
+                            print('[BATCH] all scans in the list have been reconstructed, pausing...')
+                            for i in range(30):
+                                time.sleep(0.1)
                                 QtWidgets.QApplication.processEvents()
                     if scan_num is not None:
                         self._scan_numbers = [scan_num]
@@ -1393,7 +1457,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 self.resetButtons()
                 if self.roiWindow is not None:
                     self.roiWindow = None
-                return
+                return None, None
 
         if self._scan_numbers is not None and len(self._scan_numbers) > 0:
             scan_num = self._scan_numbers.pop()
@@ -1401,9 +1465,28 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 prop_dist = self._prop_dists.pop()
             else:
                 prop_dist = None
+        else:
+            scan_num = None
+            prop_dist = None
+
+        return scan_num,prop_dist
+
+    def _batch_manager(self):
+        '''
+        This is a "linked list" that utilizes Qt's signal mechanism to retrieve the next item in the list
+        when the current item is processed. We need this because most likely the users want to put all
+        available computing resources to process the batch item by item, and having more than one worker
+        is not helping.
+        '''
+        
+        self.btn_recon_batch_start.setEnabled(False)
+        self.btn_recon_batch_stop.setEnabled(True)
+        scan_num,prop_dist = self._roll_next_scannum()
+
+        if scan_num is not None:
             print("[BATCH] begin processing scan " + str(scan_num) + "...")
             self.sp_scan_num.setValue(scan_num)
-            if prop_dist:
+            if prop_dist is not None:
                 self.sp_prop_distance.setValue(prop_dist)
 
             if self.ck_batch_crop_flag.isChecked():
@@ -1424,9 +1507,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         if self.ck_batch_track.isChecked(): # Scan is ongoing
             while not self.crop_scan() and not self._batch_stopped:
-                print(f"[BATCH] Scan {str(self.sp_scan_num.value())} cannot be loaded, pausing 5 seconds...")
-                for i in range(10):
-                    time.sleep(0.5)
+                print('\r[BATCH] Scan {str(self.sp_scan_num.value())} cannot be loaded, pausing...')
+                for i in range(30):
+                    time.sleep(0.1)
                     QtWidgets.QApplication.processEvents()
             if not self._batch_stopped:
                 if not self.ck_batch_run_flag.isChecked():
@@ -1648,7 +1731,6 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
     def loadExpParam(self):
         scan_num = self.sp_scan_num.value()
-
 
         self._loaded = False
         try:
