@@ -18,6 +18,65 @@ from .databroker_api import load_metadata, save_data
 from .utils import use_mpi_machinefile, set_flush_early
 from .ptycho.utils import save_config
 
+
+class RemoteJobHandler:
+    def __init__(self):
+        self.url =  "https://orion-api-staging.nsls2.bnl.gov/api/v1/compute/orion/jobs"
+        self.api_key = os.getenv("APIKEY")
+        self.headers =  {
+            "Content-Type": "application/json",
+            "x-api-key": f"{self.api_key}"
+            }
+        self.params = {"expand_info": False}
+
+    def submit_job(self, remote_path, param):
+        print("inside submit job with path ", remote_path)
+        print("inside submit job num_gpus ", param.gpus)
+
+        #remote_path =  "/nsls2/users/skarakuzu1/orion_ptycho"
+
+        srun_command = "python -W ignore -m nsls2ptycho.core.ptycho.recon_ptycho_gui /nsls2/users/skarakuzu1/ptycho_test/remote_orion/ptycho_320045_t1"
+        #srun_command = "python solve.py"
+
+        payload = {
+          "script": "#!/bin/bash -l\n"
+                    "#SBATCH --job-name=trial\n"
+                    "#SBATCH --partition=normal\n"
+                    f"#SBATCH --gres=gpu:{len(param.gpus)}\n"
+                    "#SBATCH --time=0-00:10:00\n"
+                    f"#SBATCH --ntasks={len(param.gpus)}\n"
+                    "#SBATCH --gpus-per-task=1\n"
+                    "#SBATCH --error=%x.err\n"
+                    "#SBATCH --output=%x.out\n\n"
+                    "conda activate /nsls2/conda/envs/2025-2.0-py311-tiled\n\n"
+                    "module load orion/gpu\n\n"
+                    f"srun {srun_command}",
+          "environment": ["PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/nsls2/users/skarakuzu1", "SLURM_EXPORT_ENV=ALL"],
+          "working_dir_path": f"{remote_path}"
+        }
+        print("printing payload")
+        print(payload)
+        sys.stdout.flush()
+
+        response = requests.post(self.url, headers=self.headers, json=payload)
+        resp_json = response.json()
+        print("response is ", response.status_code, resp_json)
+        
+        if response.status_code == 200:
+            self.remote_job_id = resp_json['job_id']
+            print("job_id is ", self.remote_job_id)
+
+        return response.status_code
+
+
+    def cancel_job(self):
+        response = requests.delete(f"{self.url}/{self.remote_job_id}", headers=self.headers, params=self.params)
+
+        resp_json = response.json()
+        print("response is ", response.status_code, resp_json)
+
+        return response.status_code
+
 class PtychoReconRemote(QtCore.QThread):
     update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)
 
@@ -38,6 +97,8 @@ class PtychoReconRemote(QtCore.QThread):
                 pass
         self.msg = open(self.msg_file,'r')
         self.msg.readlines()
+         
+        self.remote_job_handler = RemoteJobHandler()
 
     def _parse_message(self, tokens):
         def _parser(current, upper_limit, target_list):
@@ -103,35 +164,6 @@ class PtychoReconRemote(QtCore.QThread):
             except:
                 pass
    
-    def submit_job(self):
-        url = "https://orion-api-staging.nsls2.bnl.gov/api/v1/compute/orion/jobs"
-        bearer_token = os.getenv("SLURM_JWT")
-
-        payload = {
-          "script": "#!/bin/bash -l\n"
-                    "#SBATCH --job-name=trial\n"
-                    "#SBATCH --time=0-00:10:00\n"
-                    "#SBATCH --nodes=1\n"
-                    "#SBATCH --ntasks-per-node=2\n"
-                    "#SBATCH --error=%x.err\n"
-                    "#SBATCH --output=%x.out\n\n"
-                    "module purge\n"
-                    "module load beamline-aliases\n\n"
-                    "source load-hxn\n\n"
-                    "srun python solve.py",
-          "environment": ["PATH=/usr/bin:/bin:/usr/sbin:/sbin", "SLURM_EXPORT_ENV=ALL"],
-          "working_dir_path": "/nsls2/users/skarakuzu1/orion_ptycho"
-        }
-        
-        print(payload)
-        headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {bearer_token}"
-                }
-
-        response = requests.post(url, headers=headers, json=payload)
-        print("response is ", response)
-
 
     def recon_remote(self, param:Param, update_fcn=None):
 
@@ -153,8 +185,10 @@ class PtychoReconRemote(QtCore.QThread):
 
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
+        #bearer_token = os.getenv("SLURM_JWT")
         print("Submitting job from the gui")
-        self.submit_job()
+        status = self.remote_job_handler.submit_job(self.remote_path, param)
+
 
         # try:
         time.sleep(1)
@@ -210,9 +244,12 @@ class PtychoReconRemote(QtCore.QThread):
             
         finally:
             self.clear_slurm_header()
+            print("Cancelling from the gui")
+            self.remote_job_handler.cancel_job()
             print('finally?')
 
     def kill(self):
+        print("In the kill section")
         if os.path.isdir(self.remote_path):
             with open(os.path.join(self.remote_path,'abort'),'w') as f:
                 pass
