@@ -38,22 +38,38 @@ class RemoteJobHandler:
         srun_command = "python -W ignore -m nsls2ptycho.core.ptycho.recon_ptycho_gui /nsls2/users/skarakuzu1/ptycho_test/remote_orion/ptycho_320045_t1"
         #srun_command = "python solve.py"
 
-        payload = {
-          "script": "#!/bin/bash -l\n"
-                    "#SBATCH --job-name=trial\n"
-                    "#SBATCH --partition=normal\n"
-                    f"#SBATCH --gres=gpu:{len(param.gpus)}\n"
-                    "#SBATCH --time=0-00:10:00\n"
-                    f"#SBATCH --ntasks={len(param.gpus)}\n"
-                    "#SBATCH --gpus-per-task=1\n"
-                    "#SBATCH --error=%x.err\n"
-                    "#SBATCH --output=%x.out\n\n"
-                    "conda activate /nsls2/conda/envs/2025-2.0-py311-tiled\n\n"
-                    "module load orion/gpu\n\n"
-                    f"srun {srun_command}",
-          "environment": ["PATH=/usr/bin:/bin:/usr/sbin:/sbin", "HOME=/nsls2/users/skarakuzu1", "SLURM_EXPORT_ENV=ALL"],
-          "working_dir_path": f"{remote_path}"
+        overrides = {
+            "name": "trial",
+            "partition": "normal",
+            "tasks": f"{len(param.gpus)}",
+            "time_limit": 720,
+            "tres_per_task": "cpu=1,gres/gpu=1",
+            "standard_output": "trial.out",
+            "standard_error": "trial.err",
         }
+
+        payload = {
+            "script": (
+                "#!/bin/bash -l\n"
+                "module load orion/gpu\n"
+                "module unload openmpi\n"
+                "conda activate /nsls2/conda/envs/2025-2.0-py311-tiled/\n"
+                "nvidia-smi\n"
+                "echo $(pwd)\n"
+                "echo $(which mpicc)\n"
+                #f"mpirun -n 2 {srun_command}\n"
+                f"srun --mpi=pmix {srun_command}\n"
+            ),
+            "working_dir_path": f"{remote_path}",
+            "environment": [
+                "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+                "HOME=/nsls2/users/skarakuzu1",
+                "SLURM_EXPORT_ENV=ALL",
+            ],
+            "overrides": overrides,
+        }
+
+
         print("printing payload")
         print(payload)
         sys.stdout.flush()
@@ -66,6 +82,7 @@ class RemoteJobHandler:
             self.remote_job_id = resp_json['job_id']
             print("job_id is ", self.remote_job_id)
 
+
         return response.status_code
 
 
@@ -76,6 +93,17 @@ class RemoteJobHandler:
         print("response is ", response.status_code, resp_json)
 
         return response.status_code
+
+    def get_job_status(self):
+        response = requests.get(f"{self.url}/{self.remote_job_id}", headers=self.headers, params=self.params)
+
+        resp_json = response.json()
+        print("response is ", response.status_code, resp_json)
+
+        if response.status_code == 200:
+            state = resp_json["jobs"][0]["state"][0]
+        return state
+
 
 class PtychoReconRemote(QtCore.QThread):
     update_signal = QtCore.pyqtSignal(int, object) # (interation number, chi arrays)
@@ -186,24 +214,59 @@ class PtychoReconRemote(QtCore.QThread):
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
         #bearer_token = os.getenv("SLURM_JWT")
-        print("Submitting job from the gui")
         status = self.remote_job_handler.submit_job(self.remote_path, param)
+        print("Submitted job from the gui")
 
 
         # try:
+        #time.sleep(1)
+        #while not out:
+        #    print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
+        #    time.sleep(1)
+        #    out = self.msg.readlines()
+        #    if os.path.isfile(os.path.join(self.remote_path,'abort')):
+        #        os.remove(os.path.join(self.remote_path,'abort'))
+        #        if os.path.isfile(os.path.join(self.remote_path,'msg')):
+        #            os.remove(os.path.join(self.remote_path,'msg'))
+        #        if os.path.isfile(self.fname_full):
+        #            os.remove(self.fname_full)
+        #        raise Exception('Remote recon aborted...')
+
+        while self.remote_job_handler.get_job_status() != "RUNNING":
+            print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
+
+
         time.sleep(1)
-        out = self.msg.readlines()
+        print("DEBUG: Attempting to read job output...")
+
+        file_name = f"slurm-{self.remote_job_handler.remote_job_id}.out"
+        msg_file = os.path.join(self.remote_path, file_name)
+        
+        print("DEBUG: msg_file =", msg_file)
+        print("DEBUG: exists? ", os.path.exists(msg_file))
+
+        try:
+            with open(msg_file, "r") as f:
+                print("DEBUG: opened successfully")
+                print(f.read())
+        except Exception as e:
+            print("DEBUG: ERROR opening file:", e)
+
+        msg = open(msg_file, "r") 
+        out = None
         while not out:
             print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
             time.sleep(1)
-            out = self.msg.readlines()
-            if os.path.isfile(os.path.join(self.remote_path,'abort')):
-                os.remove(os.path.join(self.remote_path,'abort'))
-                if os.path.isfile(os.path.join(self.remote_path,'msg')):
-                    os.remove(os.path.join(self.remote_path,'msg'))
-                if os.path.isfile(self.fname_full):
-                    os.remove(self.fname_full)
-                raise Exception('Remote recon aborted...')
+            out = msg.readlines()
+            #if os.path.isfile(os.path.join(self.remote_path,'abort')):
+            #    os.remove(os.path.join(self.remote_path,'abort'))
+            #    if os.path.isfile(os.path.join(self.remote_path,'msg')):
+            #        os.remove(os.path.join(self.remote_path,'msg'))
+            #    if os.path.isfile(self.fname_full):
+            #        os.remove(self.fname_full)
+            #    raise Exception('Remote recon aborted...')
+
+        
 
         while True:
             for line in out:
@@ -216,12 +279,12 @@ class PtychoReconRemote(QtCore.QThread):
                     #print(result['probe_chi'])
                 if 'aborted' in line:
                     self.return_value = 1 # Aborted
-            
             if not os.path.isfile(self.fname_full):
                 break
             
             time.sleep(0.1)
-            out = self.msg.readlines()
+            out = msg.readlines()
+            #out = self.msg.readlines()
         # except:
         #     pass
         # finally:
