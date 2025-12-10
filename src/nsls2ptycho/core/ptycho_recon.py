@@ -29,14 +29,11 @@ class RemoteJobHandler:
             }
         self.params = {"expand_info": False}
 
-    def submit_job(self, remote_path, param):
-        print("inside submit job with path ", remote_path)
-        print("inside submit job num_gpus ", param.gpus)
+    def submit_job(self, remote_path, parent_module, param):
 
-        #remote_path =  "/nsls2/users/skarakuzu1/orion_ptycho"
-
-        srun_command = "python -W ignore -m nsls2ptycho.core.ptycho.recon_ptycho_gui /nsls2/users/skarakuzu1/ptycho_test/remote_orion/ptycho_320045_t1"
-        #srun_command = "python solve.py"
+        fname_full = os.path.join(remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign)
+        srun_command = "python " + "-W " + "ignore " + "-m " + parent_module + ".ptycho.recon_ptycho_gui " + fname_full
+        #srun_command = "python -W ignore -m nsls2ptycho.core.ptycho.recon_ptycho_gui /nsls2/users/skarakuzu1/ptycho_test/remote_orion/ptycho_320045_t1"
 
         overrides = {
             "name": "trial",
@@ -70,17 +67,15 @@ class RemoteJobHandler:
         }
 
 
-        print("printing payload")
-        print(payload)
         sys.stdout.flush()
 
         response = requests.post(self.url, headers=self.headers, json=payload)
         resp_json = response.json()
-        print("response is ", response.status_code, resp_json)
+        #print("response is ", response.status_code, resp_json)
         
         if response.status_code == 200:
             self.remote_job_id = resp_json['job_id']
-            print("job_id is ", self.remote_job_id)
+            print("submitted job with id ", self.remote_job_id)
 
 
         return response.status_code
@@ -90,7 +85,7 @@ class RemoteJobHandler:
         response = requests.delete(f"{self.url}/{self.remote_job_id}", headers=self.headers, params=self.params)
 
         resp_json = response.json()
-        print("response is ", response.status_code, resp_json)
+        #print("response is ", response.status_code, resp_json)
 
         return response.status_code
 
@@ -98,7 +93,7 @@ class RemoteJobHandler:
         response = requests.get(f"{self.url}/{self.remote_job_id}", headers=self.headers, params=self.params)
 
         resp_json = response.json()
-        print("response is ", response.status_code, resp_json)
+        #print("response is ", response.status_code, resp_json)
 
         if response.status_code == 200:
             state = resp_json["jobs"][0]["state"][0]
@@ -119,12 +114,12 @@ class PtychoReconRemote(QtCore.QThread):
         if not os.path.isdir(self.remote_path):
             os.mkdir(self.remote_path)
 
-        self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
-        if not os.path.isfile(self.msg_file):
-            with open(self.msg_file,'w') as f:
-                pass
-        self.msg = open(self.msg_file,'r')
-        self.msg.readlines()
+        #self.msg_file = os.path.join(os.path.join(self.remote_path,'msg'))
+        #if not os.path.isfile(self.msg_file):
+        #    with open(self.msg_file,'w') as f:
+        #        pass
+        #self.msg = open(self.msg_file,'r')
+        #self.msg.readlines()
          
         self.remote_job_handler = RemoteJobHandler()
 
@@ -192,11 +187,20 @@ class PtychoReconRemote(QtCore.QThread):
             except:
                 pass
    
+    def cleanup(self):
+        if self.fname_full and os.path.exists(self.fname_full):
+            os.remove(self.fname_full)
+            self.fname_full = None
+        if os.path.exists(os.path.join(self.remote_path,'prb_live.npy')):
+            os.remove(os.path.join(self.remote_path,'prb_live.npy'))
+        if os.path.exists(os.path.join(self.remote_path,'obj_live.npy')):
+            os.remove(os.path.join(self.remote_path,'obj_live.npy'))
 
     def recon_remote(self, param:Param, update_fcn=None):
 
         self.fname_full = os.path.join(self.remote_path,'ptycho_'+str(param.scan_num)+'_'+param.sign)
-        
+        self.parent_module = '.'.join(self.__module__.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
+
         if param.working_directory:
             param.working_directory = os.path.realpath(param.working_directory)+'/'
         if param.prb_dir:
@@ -213,9 +217,8 @@ class PtychoReconRemote(QtCore.QThread):
 
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
-        #bearer_token = os.getenv("SLURM_JWT")
-        status = self.remote_job_handler.submit_job(self.remote_path, param)
-        print("Submitted job from the gui")
+        status = self.remote_job_handler.submit_job(self.remote_path, self.parent_module, param)
+        print(f"Submitted job from the gui with status code {status} and reserved job id {self.remote_job_handler.remote_job_id}")
 
 
         # try:
@@ -232,43 +235,32 @@ class PtychoReconRemote(QtCore.QThread):
         #            os.remove(self.fname_full)
         #        raise Exception('Remote recon aborted...')
 
+        time.sleep(1)
         while self.remote_job_handler.get_job_status() != "RUNNING":
             print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
+            time.sleep(1)
 
-
-        time.sleep(1)
-        print("DEBUG: Attempting to read job output...")
 
         file_name = f"slurm-{self.remote_job_handler.remote_job_id}.out"
-        msg_file = os.path.join(self.remote_path, file_name)
+        self.msg_file = os.path.join(self.remote_path, file_name)
         
-        print("DEBUG: msg_file =", msg_file)
-        print("DEBUG: exists? ", os.path.exists(msg_file))
-
-        try:
-            with open(msg_file, "r") as f:
-                print("DEBUG: opened successfully")
-                print(f.read())
-        except Exception as e:
-            print("DEBUG: ERROR opening file:", e)
-
-        msg = open(msg_file, "r") 
-        out = None
+        self.msg = open(self.msg_file, "r") 
+        out = self.msg.readlines()
+        pos = 0
+        
+        time.sleep(1)
         while not out:
-            print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
+            print('Waiting for remote worker on %s to start writing...'%param.remote_srv)
+            out = self.msg.readlines()
             time.sleep(1)
-            out = msg.readlines()
-            #if os.path.isfile(os.path.join(self.remote_path,'abort')):
-            #    os.remove(os.path.join(self.remote_path,'abort'))
-            #    if os.path.isfile(os.path.join(self.remote_path,'msg')):
-            #        os.remove(os.path.join(self.remote_path,'msg'))
-            #    if os.path.isfile(self.fname_full):
-            #        os.remove(self.fname_full)
-            #    raise Exception('Remote recon aborted...')
 
         
-
+        time.sleep(1)
         while True:
+            self.msg.seek(pos)
+            out = self.msg.readlines()
+            pos = self.msg.tell()  # remember where we stopped
+
             for line in out:
                 print(line, end='') # because the line already ends with '\n'
                 tokens = line.split()
@@ -282,9 +274,17 @@ class PtychoReconRemote(QtCore.QThread):
             if not os.path.isfile(self.fname_full):
                 break
             
+            # ask Slurm about job status
+            status = self.remote_job_handler.get_job_status()
+
+            # stop when job is no longer running AND there was no new data
+            if status != "RUNNING":
+                size = os.path.getsize(self.msg_file)
+                if size == pos:
+                    break
+            
             time.sleep(0.1)
-            out = msg.readlines()
-            #out = self.msg.readlines()
+            
         # except:
         #     pass
         # finally:
@@ -306,13 +306,15 @@ class PtychoReconRemote(QtCore.QThread):
                 self.update_signal.emit(self.param.n_iterations+1,None)
             
         finally:
-            self.clear_slurm_header()
-            print("Cancelling from the gui")
-            self.remote_job_handler.cancel_job()
             print('finally?')
+            self.clear_slurm_header()
+            status = self.remote_job_handler.cancel_job()
+            print(f"Cancelled job with id {self.remote_job_handler.remote_job_id} from the gui with status code {status}")
+            self.cleanup()
 
     def kill(self):
-        print("In the kill section")
+        self.remote_job_handler.cancel_job()
+        print(f"Cancelled job with id {self.remote_job_handler.remote_job_id} from the gui with status code {status}")
         if os.path.isdir(self.remote_path):
             with open(os.path.join(self.remote_path,'abort'),'w') as f:
                 pass
