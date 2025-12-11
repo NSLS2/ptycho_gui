@@ -35,6 +35,8 @@ class RemoteJobHandler:
         srun_command = "python " + "-W " + "ignore " + "-m " + parent_module + ".ptycho.recon_ptycho_gui " + fname_full
         #srun_command = "python -W ignore -m nsls2ptycho.core.ptycho.recon_ptycho_gui /nsls2/users/skarakuzu1/ptycho_test/remote_orion/ptycho_320045_t1"
 
+        HOME = os.environ["HOME"]
+
         overrides = {
             "name": "trial",
             "partition": "normal",
@@ -52,6 +54,7 @@ class RemoteJobHandler:
                 "module unload openmpi\n"
                 "conda activate /nsls2/conda/envs/2025-2.0-py311-tiled/\n"
                 "nvidia-smi\n"
+                "echo $HOME\n"
                 "echo $(pwd)\n"
                 "echo $(which mpicc)\n"
                 #f"mpirun -n 2 {srun_command}\n"
@@ -60,7 +63,7 @@ class RemoteJobHandler:
             "working_dir_path": f"{remote_path}",
             "environment": [
                 "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
-                "HOME=/nsls2/users/skarakuzu1",
+                f"HOME={HOME}",
                 "SLURM_EXPORT_ENV=ALL",
             ],
             "overrides": overrides,
@@ -213,27 +216,12 @@ class PtychoReconRemote(QtCore.QThread):
             param.obj_path = os.path.realpath(param.obj_path)
         
         save_config(self.fname_full,param)
-        self.export_slurm_header()
+        #self.export_slurm_header()
 
         self.return_value = 0 # Assume the recon will succeed unless later detects failure and modify it.
 
         status = self.remote_job_handler.submit_job(self.remote_path, self.parent_module, param)
         print(f"Submitted job from the gui with status code {status} and reserved job id {self.remote_job_handler.remote_job_id}")
-
-
-        # try:
-        #time.sleep(1)
-        #while not out:
-        #    print('Waiting for remote worker on %s to take the recon task...'%param.remote_srv)
-        #    time.sleep(1)
-        #    out = self.msg.readlines()
-        #    if os.path.isfile(os.path.join(self.remote_path,'abort')):
-        #        os.remove(os.path.join(self.remote_path,'abort'))
-        #        if os.path.isfile(os.path.join(self.remote_path,'msg')):
-        #            os.remove(os.path.join(self.remote_path,'msg'))
-        #        if os.path.isfile(self.fname_full):
-        #            os.remove(self.fname_full)
-        #        raise Exception('Remote recon aborted...')
 
         time.sleep(1)
         while self.remote_job_handler.get_job_status() != "RUNNING":
@@ -307,7 +295,7 @@ class PtychoReconRemote(QtCore.QThread):
             
         finally:
             print('finally?')
-            self.clear_slurm_header()
+            #self.clear_slurm_header()
             status = self.remote_job_handler.cancel_job()
             print(f"Cancelled job with id {self.remote_job_handler.remote_job_id} from the gui with status code {status}")
             self.cleanup()
