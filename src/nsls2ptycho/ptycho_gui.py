@@ -1507,7 +1507,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         if self.ck_batch_track.isChecked(): # Scan is ongoing
             while not self.crop_scan() and not self._batch_stopped:
-                print('\r[BATCH] Scan {str(self.sp_scan_num.value())} cannot be loaded, pausing...')
+                print(f'\r[BATCH] Scan {str(self.sp_scan_num.value())} cannot be loaded, pausing...')
                 for i in range(30):
                     time.sleep(0.1)
                     QtWidgets.QApplication.processEvents()
@@ -1545,14 +1545,17 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         
         #print("ROI:", self.roiWindow.canvas.get_red_roi())
         badpixels = None
-        self._batch_badpixel_file = self.le_batch_badpixel.text()
-        if self._batch_badpixel_file is not None and len(self._batch_badpixel_file) > 0:
-            badpixels = []
-            with open(self._batch_badpixel_file, 'r') as f:
-                for line in f:
-                    x, y = map(int, line.strip().split())
-                    badpixels.append((x,y))
-            badpixels = np.array(badpixels).T
+        try:
+            self._batch_badpixel_file = self.le_batch_badpixel.text()
+            if self._batch_badpixel_file is not None and len(self._batch_badpixel_file) > 0:
+                badpixels = []
+                with open(self._batch_badpixel_file, 'r') as f:
+                    for line in f:
+                        x, y = map(int, line.strip().split())
+                        badpixels.append((x,y))
+                badpixels = np.array(badpixels).T
+        except:
+            print(f"Error loading badpixels file {self._batch_badpixel_file}, skipping it...")
 
         roi_width = self.sp_batch_width.value()
         roi_height = self.sp_batch_height.value()
