@@ -181,7 +181,11 @@ def load_metadata(db, scan_num:int, det_name:str):
                 ic = np.ones(num_frame,dtype=np.float32)
         array_ensure_positive_elements(ic, name="scaler")
 
-        if 'merlin2' in header.start['detectors']:
+        if scan_motors[0].startswith('ss'):
+            ccd_pixel_um = 75.
+
+            z_m = 1.98
+        elif 'merlin2' in header.start['detectors']:
             # get ccd_pixel_um
             ccd_pixel_um = 55.
 
@@ -223,8 +227,13 @@ def load_metadata(db, scan_num:int, det_name:str):
                     items = [det_name, 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
                     ic_chan = None
             else:
-                items = [det_name, 'sclr1_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
-                ic_chan = 'sclr1_ch4'
+                if scan_motors[0].startswith('ss'):
+                    items = [det_name, 'sclr1_ch3', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = 'sclr1_ch3'
+                else:
+                    items = [det_name, 'sclr1_ch4', 'inenc1_val', 'inenc2_val', 'inenc3_val', 'inenc4_val']
+                    ic_chan = 'sclr1_ch4'
+                    
             bl = db.get_table(header, stream_name='baseline')
             df = db.get_table(header, fields=items, fill=False)
             #images = db_old.get_images(db_old[sid], name=det_name)
@@ -300,10 +309,13 @@ def load_metadata(db, scan_num:int, det_name:str):
                 #points[1,:] = np.linspace(scan_doc['scan_input'][3],scan_doc['scan_input'][4],num_frame)
                 #points[:,:-1] = (points[:,:-1]+points[:,1:])/2
                 #points[:,3:-4] = (points[:,:-7]+points[:,1:-6]+points[:,2:-5]+points[:,3:-4]+points[:,4:-3]+points[:,5:-2]+points[:,6:-1]+points[:,7:])/8
-                if 'detector_distance' in header.start['scan']:
-                        z_m = header.start['scan']['detector_distance']
+                if scan_motors[0].startswith('ss'):
+                    z_m = 1.98
+                elif 'detector_distance' in header.start['scan']:
+                    z_m = header.start['scan']['detector_distance']
                 else:
-                        z_m = 2.05
+                    z_m = 2.05
+                
                 try:
                     if scan_motors[0].startswith('zp'):
                         angle = bl.zpsth[1]

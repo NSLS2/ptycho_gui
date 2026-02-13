@@ -22,7 +22,7 @@ class recon_worker:
             self.process.wait()
         self.abort_recon()
         sys.exit(0)
-    
+
     def __init__(self,monitor_path,timeout,uuid=''):
         self.monitor_path = monitor_path
         self.timeout = timeout
@@ -54,11 +54,11 @@ class recon_worker:
         else:
             self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
             self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
-    
+
     def close_mmap(self):
-        # We close shared memory as long as the backend is terminated either normally or 
+        # We close shared memory as long as the backend is terminated either normally or
         # abnormally. The subtlety here is that the monitor should still be able to access
-        # the intermediate results after mmaps' are closed. A potential segfault is avoided 
+        # the intermediate results after mmaps' are closed. A potential segfault is avoided
         # by accessing the transformed results, which are buffered, not the original ones.
         try:
             for mm, shm in zip(self.mm_list, self.shm_list):
@@ -100,7 +100,7 @@ class recon_worker:
         if os.path.exists(os.path.join(self.monitor_path,f'abort{self.uuid}')):
             os.remove(os.path.join(self.monitor_path,f'abort{self.uuid}'))
 
-        
+
     def abort_recon(self):
         if self.process:
             self.process.terminate()
@@ -136,9 +136,9 @@ class recon_worker:
 
         # for CuPy v8.0+
         os.environ['CUPY_ACCELERATORS'] = 'cub'
-        
+
         print(mpirun_command)
-           
+
         try:
             self.return_value = None
             with subprocess.Popen(mpirun_command,
@@ -147,14 +147,14 @@ class recon_worker:
                                   env=dict(os.environ, mpi_warn_on_fork='0')) as run_ptycho:
                 self.process = run_ptycho # register the subprocess
 
-                # idea: if we attempts to readline from an empty pipe, it will block until 
+                # idea: if we attempts to readline from an empty pipe, it will block until
                 # at least one line is piped in. However, stderr is ususally empty, so reading
-                # from it is very likely to block the output until the subprocess ends, which 
+                # from it is very likely to block the output until the subprocess ends, which
                 # is bad. Thus, we want to set the O_NONBLOCK flag for stderr, see
-                # http://eyalarubas.com/python-subproc-nonblock.html 
+                # http://eyalarubas.com/python-subproc-nonblock.html
                 #
-                # Note that it is unclear if readline in Python 3.5+ is guaranteed safe with 
-                # non-blocking pipes or not. See https://bugs.python.org/issue1175#msg56041 
+                # Note that it is unclear if readline in Python 3.5+ is guaranteed safe with
+                # non-blocking pipes or not. See https://bugs.python.org/issue1175#msg56041
                 # and https://stackoverflow.com/questions/375427/
                 # If this is a concern, using the asyncio module could be a safer approach?
                 # One could also process stdout in one loop and then stderr in another, which
@@ -169,7 +169,7 @@ class recon_worker:
                         raise Exception("Server sends abort signal")
                     stdout = run_ptycho.stdout.readline()
                     stderr = run_ptycho.stderr.readline() # without O_NONBLOCK this will very likely block
-                    
+
                     if (run_ptycho.poll() is not None) and (stdout==b'') and (stderr==b''):
                         break
 
@@ -189,7 +189,7 @@ class recon_worker:
                         stderr = stderr.decode('utf-8')
                         self.msg_export(stderr.strip())
 
-                # get the return value 
+                # get the return value
                 self.return_value = run_ptycho.poll()
 
             if self.return_value != 0:
@@ -208,7 +208,7 @@ class recon_worker:
             if os.path.isfile(filepath):
                 os.remove(filepath)
             self.complete_recon()
-            
+
 
 
     def monitor(self):
@@ -243,7 +243,7 @@ class recon_worker:
                             pass
             if self.timeout is not None and time.time() - start_time > self.timeout:
                 self.job_done = True
-                
+
 class recon_worker_slurm:
     def __init__(self,slurm_header = None):
         self.base_dir = os.path.expanduser("~") + "/.ptycho_gui/"
@@ -270,7 +270,7 @@ class recon_worker_slurm:
 
         self.dot_count = 1
         self.job_list = []
-    
+
     def clear_slurm_headers(self,uuid):
         if os.path.isfile(self.slurm_header%uuid):
             try:
@@ -283,7 +283,7 @@ class recon_worker_slurm:
             except:
                 pass
 
-        
+
     def exit(self,sig = None ,frame = None):
         print('\nExit signal received.')
         while len(self.job_list) > 0:
@@ -305,7 +305,7 @@ class recon_worker_slurm:
                         pass
             time.sleep(0.5)
         sys.exit(0)
-    
+
     def new_sbatch_job(self,uuid,nthreads):
         parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
         sbatch_script_path = self.sbatch_header%uuid
@@ -324,12 +324,12 @@ class recon_worker_slurm:
                 source load-hxn
                 python -W ignore -m {parent_module}.remote_worker {self.remote_config_path} 5  {uuid} # <monitor_path> <timeout> <uuid>
             ''').strip()
-        
+
         with open(sbatch_script_path,'w') as f:
             f.write(sbatch_script)
 
         sbatch_command = ["sbatch","--parsable",sbatch_script_path]
-        
+
         print("")
         print(sbatch_command)
 
@@ -354,7 +354,9 @@ class recon_worker_slurm:
     def monitor(self):
         last_update = -10000
         while True:
-            flist = [f for f in os.listdir(self.base_dir) if f.startswith('.ptycho_slurm_job')]
+            flist = [f for f in os.listdir(self.base_dir) if f.startswith('.ptycho_slurm_job') and len(f) == 21]
+            # File has to be named .ptycho_slurm_job#### with 4-digit uuid
+
             n_queue = 0
             for fname in flist:
                 uuid = fname[-4:]
@@ -374,7 +376,7 @@ class recon_worker_slurm:
                                 print(f"Submitted batch job {uuid} jobid {self.job_list[-1]['jobid']}")
                                 last_update = -10000 # Force update
                                 time.sleep(1)
-            
+
             self.query_jobs()
 
             if len(self.job_list) == 0:
@@ -402,10 +404,10 @@ class recon_worker_slurm:
                         print(f' {n_pending} job pending allocation',end='')
                     if n_queue > 0 :
                         print(f' {n_queue} job in the queue',end='')
-                    
+
                     print(f'{"." * self.dot_count}                  ',end='')
                     self.dot_count = (self.dot_count)%3 + 1
-                    
+
             # Show the queue every 30 s
             if (time.time() - last_update)>30:
                 print('')
@@ -416,15 +418,15 @@ class recon_worker_slurm:
                 print('# squeue display updates every 30s #')
                 last_update = time.time()
             time.sleep(0.5)
-                        
+
             os.listdir(self.base_dir)
             if os.path.isfile(self.slurm_exit_signal):
                 os.remove(self.slurm_exit_signal)
                 self.exit()
-                    
 
 
-            
+
+
 def main():
     srv_name = socket.gethostname().split('.')[0]
 
@@ -438,6 +440,7 @@ def main():
             # monitor current folder
             monitor_path = os.path.join(os.path.abspath('.'),'remote_'+srv_name+'_'+getpass.getuser())
             timeout = None
+            uuid = ''
         else: # First argument is monitor_path
             monitor_path = sys.argv[1]
             if len(sys.argv) > 2: # Second argument is timeout time in second
