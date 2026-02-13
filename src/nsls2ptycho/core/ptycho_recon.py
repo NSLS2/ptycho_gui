@@ -90,6 +90,7 @@ class PtychoReconRemote(QtCore.QThread):
         self.uuid = param.uuid
 
         self.return_value = None
+        self.killed = False
 
         self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+getpass.getuser())
         if not os.path.isdir(self.remote_path):
@@ -237,7 +238,7 @@ class PtychoReconRemote(QtCore.QThread):
             pass
         else:
             # let preview window load results
-            if self.param.preview_flag and self.return_value==0:
+            if self.param.preview_flag and self.return_value==0 and not self.killed:
                 self.update_signal.emit(-2,None)
             
         finally:
@@ -246,6 +247,7 @@ class PtychoReconRemote(QtCore.QThread):
             print('finally?')
 
     def kill(self):
+        self.killed = True
         if os.path.isdir(self.remote_path):
             with open(os.path.join(self.remote_path,'abort'+self.uuid),'w') as f:
                 pass
@@ -263,6 +265,7 @@ class PtychoReconWorker(QtCore.QThread):
         super().__init__(parent)
         self.param = param
         self.return_value = None
+        self.killed = False
 
     def _parse_message(self, tokens):
         def _parser(current, upper_limit, target_list):
@@ -418,13 +421,14 @@ class PtychoReconWorker(QtCore.QThread):
             pass
         else:
             # let preview window load results
-            if self.param.preview_flag and self.return_value == 0:
-                self.update_signal.emit(self.param.n_iterations+1, None)
+            if self.param.preview_flag and self.return_value == 0 and not self.killed:
+                self.update_signal.emit(-2, None)
         finally:
             print('finally?')
 
     def kill(self):
         if self.process is not None:
+            self.killed = True
             print('killing the subprocess...')
             self.process.terminate()
             self.process.wait()
@@ -438,6 +442,7 @@ class PtychoReconLive(QtCore.QThread):
         self.param = param
         self.config_file = parent._config_path
         self.return_value = None
+        self.killed = False
 
     def _parse_message(self, tokens):
         def _parser(current, upper_limit, target_list):
@@ -557,9 +562,12 @@ class PtychoReconLive(QtCore.QThread):
                                 else: # counter > 3, we read one more line!
                                     raise Exception("parsing error")
                           
-                            it, result = self._parse_message(stdout)
-                            #print(result['probe_chi'])
-                            update_fcn(it+1, result)
+                            try:
+                                it, result = self._parse_message(stdout)
+                                #print(result['probe_chi'])
+                                update_fcn(it+1, result)
+                            except:
+                                pass
                         elif len(stdout) == 3 and stdout[0] == "shared" and update_fcn is not None:
                             update_fcn(-1, "init_mmap")
                         elif len(stdout) == 3 and stdout[0] == "flush" and update_fcn is not None:
@@ -607,13 +615,14 @@ class PtychoReconLive(QtCore.QThread):
             pass
         else:
             # let preview window load results
-            if self.param.preview_flag and self.return_value == 0:
-                self.update_signal.emit(self.param.n_iterations+1, None)
+            if self.param.preview_flag and self.return_value == 0 and not self.killed:
+                self.update_signal.emit(-2, None)
         finally:
             print('finally?')
 
     def kill(self):
         if self.process is not None:
+            self.killed = True
             print('killing the subprocess...')
             self.process.terminate()
             self.process.wait()
