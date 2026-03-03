@@ -1,4 +1,4 @@
-import os,sys,socket,time,signal,subprocess
+import os,sys,socket,time,signal,subprocess,getpass
 from .core.utils import *
 from .core.ptycho.utils import *
 from fcntl import fcntl, F_GETFL, F_SETFL
@@ -22,12 +22,13 @@ class recon_worker:
             self.process.wait()
         self.abort_recon()
         sys.exit(0)
-    
-    def __init__(self,work_path):
-        self.work_path = work_path
-        self.srv_name = socket.gethostname().split('.')[0]
-        self.monitor_path = os.path.join(os.path.abspath(self.work_path),'remote_'+self.srv_name+'_'+os.getlogin())
-        self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'))
+
+    def __init__(self,monitor_path,timeout,uuid=''):
+        self.monitor_path = monitor_path
+        self.timeout = timeout
+        self.uuid = uuid
+        self.uuid_search = uuid
+        self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'+self.uuid))
         self.fname = None
         self.fname_full = None
         self.process = None
@@ -53,11 +54,11 @@ class recon_worker:
         else:
             self._prb = np.ndarray(shape=(p.n_iterations, 1, p.nx, p.ny), dtype=datatype, buffer=self.mm_list[1], order='C')
             self._obj = np.ndarray(shape=(p.n_iterations, p.slice_num, nx_obj, ny_obj), dtype=datatype, buffer=self.mm_list[2], order='C')
-    
+
     def close_mmap(self):
-        # We close shared memory as long as the backend is terminated either normally or 
+        # We close shared memory as long as the backend is terminated either normally or
         # abnormally. The subtlety here is that the monitor should still be able to access
-        # the intermediate results after mmaps' are closed. A potential segfault is avoided 
+        # the intermediate results after mmaps' are closed. A potential segfault is avoided
         # by accessing the transformed results, which are buffered, not the original ones.
         try:
             for mm, shm in zip(self.mm_list, self.shm_list):
@@ -79,22 +80,27 @@ class recon_worker:
     def msg_export(self,msg):
         print(msg)
         if os.path.isdir(self.monitor_path):
-            if not os.path.isfile(self.msg_file):
-                with open(self.msg_file,'w') as f:
-                    pass
-            with open(self.msg_file,'a') as f:
-                f.write(msg+'\n')
+            if self.uuid != '':
+                if not os.path.isfile(self.msg_file):
+                    with open(self.msg_file,'w') as f:
+                        pass
+                with open(self.msg_file,'a') as f:
+                    f.write(msg+'\n')
     def cleanup(self):
         self.close_mmap()
         if self.fname_full and os.path.exists(self.fname_full):
             os.remove(self.fname_full)
             self.fname_full = None
-        if os.path.exists(os.path.join(self.monitor_path,'prb_live.npy')):
-            os.remove(os.path.join(self.monitor_path,'prb_live.npy'))
-        if os.path.exists(os.path.join(self.monitor_path,'obj_live.npy')):
-            os.remove(os.path.join(self.monitor_path,'obj_live.npy'))
+        if os.path.exists(os.path.join(self.monitor_path,f'prb_live{self.uuid}.npy')):
+            os.remove(os.path.join(self.monitor_path,f'prb_live{self.uuid}.npy'))
+        if os.path.exists(os.path.join(self.monitor_path,f'obj_live{self.uuid}.npy')):
+            os.remove(os.path.join(self.monitor_path,f'obj_live{self.uuid}.npy'))
+        if os.path.exists(os.path.join(self.monitor_path,f'msg{self.uuid}')):
+            os.remove(os.path.join(self.monitor_path,f'msg{self.uuid}'))
+        if os.path.exists(os.path.join(self.monitor_path,f'abort{self.uuid}')):
+            os.remove(os.path.join(self.monitor_path,f'abort{self.uuid}'))
 
-        
+
     def abort_recon(self):
         if self.process:
             self.process.terminate()
@@ -107,16 +113,19 @@ class recon_worker:
         if self.fname_full:
             self.msg_export('[Worker]Recon done for '+self.fname)
             self.cleanup()
-            # Clear msg file
-            with open(self.msg_file,'w') as f:
-                pass
+            # Remove msg file
+            if os.path.isfile(os.path.join(self.monitor_path,'msg'+self.p.uuid)):
+                os.remove(os.path.join(self.monitor_path,'msg'+self.p.uuid))
 
     def recon(self):
-        self.msg_export('[Worker]Start reconstructing '+self.fname)
         with open(os.path.join(self.monitor_path,self.fname,),'w') as f:
             f.write('#running\n'+self.fcontent)
         self.fname_full = os.path.join(self.monitor_path,self.fname)
         self.p = parse_config(self.fname_full)
+
+        self.uuid = self.p.uuid
+        self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'+self.uuid))
+        self.msg_export('[Worker]Start reconstructing '+self.fname)
 
         nthreads = len(self.p.gpus) if self.p.gpu_flag else 1
 
@@ -127,9 +136,9 @@ class recon_worker:
 
         # for CuPy v8.0+
         os.environ['CUPY_ACCELERATORS'] = 'cub'
-        
+
         print(mpirun_command)
-           
+
         try:
             self.return_value = None
             with subprocess.Popen(mpirun_command,
@@ -138,14 +147,14 @@ class recon_worker:
                                   env=dict(os.environ, mpi_warn_on_fork='0')) as run_ptycho:
                 self.process = run_ptycho # register the subprocess
 
-                # idea: if we attempts to readline from an empty pipe, it will block until 
+                # idea: if we attempts to readline from an empty pipe, it will block until
                 # at least one line is piped in. However, stderr is ususally empty, so reading
-                # from it is very likely to block the output until the subprocess ends, which 
+                # from it is very likely to block the output until the subprocess ends, which
                 # is bad. Thus, we want to set the O_NONBLOCK flag for stderr, see
-                # http://eyalarubas.com/python-subproc-nonblock.html 
+                # http://eyalarubas.com/python-subproc-nonblock.html
                 #
-                # Note that it is unclear if readline in Python 3.5+ is guaranteed safe with 
-                # non-blocking pipes or not. See https://bugs.python.org/issue1175#msg56041 
+                # Note that it is unclear if readline in Python 3.5+ is guaranteed safe with
+                # non-blocking pipes or not. See https://bugs.python.org/issue1175#msg56041
                 # and https://stackoverflow.com/questions/375427/
                 # If this is a concern, using the asyncio module could be a safer approach?
                 # One could also process stdout in one loop and then stderr in another, which
@@ -154,13 +163,13 @@ class recon_worker:
                 fcntl(run_ptycho.stderr, F_SETFL, flags | O_NONBLOCK)
 
                 while True:
-                    if os.path.isfile(os.path.join(self.monitor_path,'abort')):
+                    if os.path.isfile(os.path.join(self.monitor_path,'abort'+self.uuid)):
                         self.process.terminate()
-                        os.remove(os.path.join(self.monitor_path,'abort'))
+                        os.remove(os.path.join(self.monitor_path,'abort'+self.uuid))
                         raise Exception("Server sends abort signal")
                     stdout = run_ptycho.stdout.readline()
                     stderr = run_ptycho.stderr.readline() # without O_NONBLOCK this will very likely block
-                    
+
                     if (run_ptycho.poll() is not None) and (stdout==b'') and (stderr==b''):
                         break
 
@@ -171,8 +180,8 @@ class recon_worker:
                         if len(tokens) > 2 and tokens[0] == "[INFO]":
                             it = int(tokens[2])
                             if (it-1) % self.p.display_interval == 0:
-                                np.save(os.path.join(self.monitor_path,'prb_live.npy'),self._prb[it-1])
-                                np.save(os.path.join(self.monitor_path,'obj_live.npy'),self._obj[it-1])
+                                np.save(os.path.join(self.monitor_path,f'prb_live{self.uuid}.npy'),self._prb[it-1])
+                                np.save(os.path.join(self.monitor_path,f'obj_live{self.uuid}.npy'),self._obj[it-1])
                         if len(tokens) == 3 and tokens[0] == "shared":
                             self.init_mmap()
 
@@ -180,7 +189,7 @@ class recon_worker:
                         stderr = stderr.decode('utf-8')
                         self.msg_export(stderr.strip())
 
-                # get the return value 
+                # get the return value
                 self.return_value = run_ptycho.poll()
 
             if self.return_value != 0:
@@ -199,30 +208,41 @@ class recon_worker:
             if os.path.isfile(filepath):
                 os.remove(filepath)
             self.complete_recon()
-            
+
 
 
     def monitor(self):
+        start_time = time.time()
         print('Ptycho worker started monitoring path '+self.monitor_path)
-        while True:
+        self.dot_count = 1
+        self.job_done = False
+        while not self.job_done:
             if not os.path.isdir(self.monitor_path):
-                print(f'Waiting for monitored path {self.monitor_path} to be created...')
-                time.sleep(3)
+                print(f'\rWaiting for monitored path {self.monitor_path} to be created{"." * self.dot_count}   ',end='')
+                self.dot_count = (self.dot_count)%3 + 1
+                time.sleep(0.5)
             else:
-                flist = [f for f in os.listdir(self.monitor_path) if f.startswith('ptycho')]
+                flist = [f for f in os.listdir(self.monitor_path) if f.startswith('ptycho') and f.endswith(self.uuid_search)]
                 if not flist:
-                    self.msg_export("[Worker]Recon folder is empty, waiting for task...")
-                    time.sleep(3)
+                    print(f'\r[Worker]Recon folder is empty, waiting for task{"." * self.dot_count}   ',end='')
+                    self.dot_count = (self.dot_count)%3 + 1
+                    time.sleep(0.5)
                 for fname in flist:
-                    print('Loading jobfile '+fname)
-                    with open(os.path.join(self.monitor_path,fname,),'r') as f:
-                        self.fcontent = f.read()
-                    if not self.fcontent.startswith('#running'):
-                        self.fname = fname
-                        self.recon()
-                    else:
-                        print(__loader__.name)
-                        self.msg_export('[Warning]Another session of ptycho worker is running on this server or the previous worker didn\'t exit normally')
+                    if os.path.isfile(os.path.join(self.monitor_path,fname)):
+                        with open(os.path.join(self.monitor_path,fname,),'r') as f:
+                            self.fcontent = f.read()
+                        if not self.fcontent.startswith('#running'):
+                            print('Loading jobfile '+fname)
+                            self.fname = fname
+                            self.recon()
+                            if self.timeout is not None:
+                                self.job_done = True
+                                break
+                        else:
+                            time.sleep(0.5)
+                            pass
+            if self.timeout is not None and time.time() - start_time > self.timeout:
+                self.job_done = True
 
 class recon_worker_slurm:
     def __init__(self,slurm_header = None):
@@ -231,9 +251,10 @@ class recon_worker_slurm:
             os.makedirs(self.base_dir)
 
         if slurm_header is None:
-            self.slurm_header = self.base_dir + "/.ptycho_slurm"
+            self.slurm_header = self.base_dir + "/.ptycho_slurm_job%s"
         else:
             self.slurm_header = slurm_header
+        self.sbatch_header = self.base_dir + f"/ptycho_slurm%s.sh"
         self.slurm_exit_signal = self.base_dir + "/.ptycho_slurm_exit"
 
         # Exit previously running monitor threads
@@ -248,145 +269,164 @@ class recon_worker_slurm:
             pass
 
         self.dot_count = 1
-        self.job_id = None
-        self.status = ''
-        
+        self.job_list = []
+
+    def clear_slurm_headers(self,uuid):
+        if os.path.isfile(self.slurm_header%uuid):
+            try:
+                os.remove(self.slurm_header%uuid)
+            except:
+                pass
+        if os.path.isfile(self.sbatch_header%uuid):
+            try:
+                os.remove(self.sbatch_header%uuid)
+            except:
+                pass
+
+
     def exit(self,sig = None ,frame = None):
         print('\nExit signal received.')
-        if self.job_id is not None:
-            print('Aborting running job / allocation...')
-            squeue_query_command = f"squeue -j {self.job_id} -h --format=%t".split()
-            self.status = subprocess.run(
-                squeue_query_command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            ).stdout.decode('utf-8').strip()
-            while self.status != '' and self.status != 'CG':
-                if self.status == 'PD':
-                    print(subprocess.run(['scancel',self.job_id],
+        while len(self.job_list) > 0:
+            self.query_jobs()
+            for i in range(len(self.job_list)-1,-1,-1): # Iterate in reverse order to pop correctly
+                job = self.job_list[i]
+                self.clear_slurm_headers(job['uuid'])
+                if job['status'] == '' or job['status'] == 'CG':
+                    self.job_list.pop(i)
+                elif job['status'] == 'PD':
+                    # Cancel job and allocation
+                    print(subprocess.run(['scancel',job['jobid']],
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE
                     ).stdout.decode('utf-8').strip())
-                elif self.status == 'R':
+                elif job['status'] == 'R':
                     # Send abort to worker
-                    with open(os.path.join(self.remote_config_path,'abort'),'w') as f:
+                    with open(os.path.join(self.remote_config_path,'abort'+job['uuid']),'w') as f:
                         pass
-                    if os.path.isfile(self.slurm_header):
-                        os.remove(self.slurm_header)
-                time.sleep(0.5)
-                self.status = subprocess.run(
-                    squeue_query_command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                ).stdout.decode('utf-8').strip()
+            time.sleep(0.5)
         sys.exit(0)
 
-    def monitor(self):
-        while True:
-            l = None
-            try:
-                os.listdir(self.base_dir)
-                with open(self.slurm_header,'r') as f:
-                    l = f.readlines()[0].split()
-            except:
-                l = None
+    def new_sbatch_job(self,uuid,nthreads):
+        parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
+        sbatch_script_path = self.sbatch_header%uuid
+        sbatch_script = dedent(f'''
+                #!/bin/bash
+                #SBATCH --job-name=ptycho
+                #SBATCH --qos=normal
+                #SBATCH --time=0-03:00:00
 
-            if l is None:
-                print(f'\rWaiting for slurm task{"." * self.dot_count}   ',end='')
-                # sys.stdout.write(f'\rWaiting for slurm task{"." * dot_count}   ')
-                # sys.stdout.flush()
-                self.dot_count = (self.dot_count)%3 + 1
-                time.sleep(0.5)
+                #SBATCH --ntasks-per-node={nthreads}
+                #SBATCH --gres=gpu:{nthreads}
 
-                os.listdir(self.base_dir)
-                if os.path.isfile(self.slurm_exit_signal):
-                    os.remove(self.slurm_exit_signal)
-                    self.exit()
-            else:
-                self.remote_config_path = l[0]
-                nthreads = l[1]
-                parent_module = '.'.join(__loader__.name.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
-                sbatch_script_path = self.base_dir + "/ptycho_slurm.sh"
-                sbatch_script = dedent(f'''
-                        #!/bin/bash
-                        #SBATCH --job-name=ptycho
-                        #SBATCH --qos=normal
-                        #SBATCH --time=0-03:00:00
+                #SBATCH --partition=normal
+                #SBATCH --error={self.base_dir + "/.ptycho_slurm.err"}
+                #SBATCH --output={self.base_dir + "/.ptycho_slurm.out"}
+                source load-hxn
+                python -W ignore -m {parent_module}.remote_worker {self.remote_config_path} 5  {uuid} # <monitor_path> <timeout> <uuid>
+            ''').strip()
 
-                        #SBATCH --ntasks-per-node={nthreads}
-                        #SBATCH --gres=gpu:{nthreads}
+        with open(sbatch_script_path,'w') as f:
+            f.write(sbatch_script)
 
-                        #SBATCH --partition=normal
-                        #SBATCH --error={self.base_dir + "/.ptycho_slurm.err"}
-                        #SBATCH --output={self.base_dir + "/.ptycho_slurm.out"}
-                        source load-hxn
-                        python -W ignore -m {parent_module}.remote_worker_slurm {self.remote_config_path}
-                    ''').strip()
-                
-                with open(sbatch_script_path,'w') as f:
-                    f.write(sbatch_script)
+        sbatch_command = ["sbatch","--parsable",sbatch_script_path]
 
-                sbatch_command = ["sbatch","--parsable",sbatch_script_path]
-                
-                print("")
-                print(sbatch_command)
+        print("")
+        print(sbatch_command)
 
-                self.job_id = subprocess.run(
-                    sbatch_command,
-                    stdout=subprocess.PIPE
-                ).stdout.decode('utf-8').strip()
+        jobid = subprocess.run(
+            sbatch_command,
+            stdout=subprocess.PIPE
+        ).stdout.decode('utf-8').strip()
 
-                print(f"Submitted batch job {self.job_id}")
-                time.sleep(1)
+        self.job_list.append({'uuid':uuid,'jobid':jobid,'status':'PD'})
 
-                complete = False
-                squeue_query_command = f"squeue -j {self.job_id} -h --format=%t".split()
-                last_update = -10000
+        return jobid
 
-                while not complete:
-                    time.sleep(0.5)
-                    self.status = subprocess.run(
+    def query_jobs(self):
+        for job in self.job_list:
+            squeue_query_command = f"squeue -j {job['jobid']} -h --format=%t".split()
+            job['status'] = subprocess.run(
                         squeue_query_command,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE
                     ).stdout.decode('utf-8').strip()
 
-                    if self.status == '':
-                        # Job doesn't exist anymore
-                        print(f"\nJob {self.job_id} is completed or aborted.")
-                        complete = True
-                        self.job_id = None
-                    elif self.status == 'PD':
-                        # Job is pending allocation, show the queue every 60 s
-                        if (time.time() - last_update)>60:
-                            print(subprocess.run('squeue',
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE
-                            ).stdout.decode('utf-8'))
-                            print(f'Job {self.job_id} pending resource allocation... # squeue display updates every 60s #')
-                            last_update = time.time()
-                    elif self.status == 'R':
-                        if last_update < np.inf:
-                            print(f"\nJob {self.job_id} is running... # Output here refreshes slower than the GUI #")
-                            last_update = np.inf
-                        try:
-                            os.listdir(self.base_dir)
-                            with open(self.base_dir+'/.ptycho_slurm.out','r') as f:
-                                last_line = f.readlines()[-1].strip()
-                            print('\r' + last_line + '             ',end='')
-                        except:
-                            pass
-                    
-                    os.listdir(self.base_dir)
-                    if os.path.isfile(self.slurm_exit_signal):
-                        os.remove(self.slurm_exit_signal)
-                        self.exit()
-                
-                if os.path.isfile(self.slurm_header):
-                    os.remove(self.slurm_header)
+    def monitor(self):
+        last_update = -10000
+        while True:
+            flist = [f for f in os.listdir(self.base_dir) if f.startswith('.ptycho_slurm_job') and len(f) == 21]
+            # File has to be named .ptycho_slurm_job#### with 4-digit uuid
+
+            n_queue = 0
+            for fname in flist:
+                uuid = fname[-4:]
+                if not any(job['uuid'] == uuid for job in self.job_list):
+                    try:
+                        with open(os.path.join(self.base_dir,fname),'r') as f:
+                            l = f.readlines()[0].split()
+                    except:
+                        l = None
+                    if l is not None:
+                        if len(l)>2 and int(l[2]) <= len(self.job_list): # Queued slurm jobs, control the number of parallel processes
+                            n_queue += 1
+                        else:
+                            self.remote_config_path = l[0]
+                            jid = self.new_sbatch_job(uuid,l[1])
+                            if jid is not None:
+                                print(f"Submitted batch job {uuid} jobid {self.job_list[-1]['jobid']}")
+                                last_update = -10000 # Force update
+                                time.sleep(1)
+
+            self.query_jobs()
+
+            if len(self.job_list) == 0:
+                print(f'\rWaiting for slurm task{"." * self.dot_count}            ',end='')
+                self.dot_count = (self.dot_count)%3 + 1
+            else:
+                n_running = 0
+                n_pending = 0
+
+                for i in range(len(self.job_list)-1,-1,-1): # Iterate in reverse order to pop correctly
+                    job = self.job_list[i]
+                    if job['status'] == '' or job['status'] == 'CG': # Complete
+                        self.clear_slurm_headers(job['uuid'])
+                        self.job_list.pop(i)
+                    elif job['status'] == 'PD': # Pending allocation
+                        n_pending += 1
+                    elif job['status'] == 'R': # Running
+                        n_running += 1
+
+                if n_pending + n_running > 0:
+                    print('\rYou have',end='')
+                    if n_running > 0 :
+                        print(f' {n_running} job running',end='')
+                    if n_pending > 0 :
+                        print(f' {n_pending} job pending allocation',end='')
+                    if n_queue > 0 :
+                        print(f' {n_queue} job in the queue',end='')
+
+                    print(f'{"." * self.dot_count}                  ',end='')
+                    self.dot_count = (self.dot_count)%3 + 1
+
+            # Show the queue every 30 s
+            if (time.time() - last_update)>30:
+                print('')
+                print(subprocess.run('squeue',
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                ).stdout.decode('utf-8'))
+                print('# squeue display updates every 30s #')
+                last_update = time.time()
+            time.sleep(0.5)
+
+            os.listdir(self.base_dir)
+            if os.path.isfile(self.slurm_exit_signal):
+                os.remove(self.slurm_exit_signal)
+                self.exit()
 
 
-            
+
+
 def main():
     srv_name = socket.gethostname().split('.')[0]
 
@@ -396,7 +436,22 @@ def main():
         signal.signal(signal.SIGINT,r.exit)
         r.monitor()
     else:
-        r = recon_worker('.')
+        if len(sys.argv) == 1: # started without argument
+            # monitor current folder
+            monitor_path = os.path.join(os.path.abspath('.'),'remote_'+srv_name+'_'+getpass.getuser())
+            timeout = None
+            uuid = ''
+        else: # First argument is monitor_path
+            monitor_path = sys.argv[1]
+            if len(sys.argv) > 2: # Second argument is timeout time in second
+                timeout = int(sys.argv[2])
+            else:
+                timeout = None
+            if len(sys.argv) > 3: # Third argument is the uuid
+                uuid = str(sys.argv[3])
+            else:
+                uuid = ''
+        r = recon_worker(monitor_path,timeout,uuid)
         signal.signal(signal.SIGINT,r.exit)
         r.monitor()
 

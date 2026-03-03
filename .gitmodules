@@ -5,4 +5,4 @@
 [submodule "nsls2ptycho/core/ptycho"]
 	path = src/nsls2ptycho/core/ptycho
 	url = git@github.com:NSLS-II/ptycho.git
-	branch = HXN_production
+	branch = HXN_development

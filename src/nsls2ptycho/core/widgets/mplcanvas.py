@@ -49,6 +49,8 @@ class MplCanvas(FigureCanvas):
         self.axes = ax
         self.fig = fig
 
+        self.aspect0 = 1
+
         self.canvas = FigureCanvas.__init__(self, fig)
         self.setParent(parent)
 
@@ -81,8 +83,10 @@ class MplCanvas(FigureCanvas):
     def update_image(self, image, clim = None):
         if self.image_handlers is None:
             self.image_handlers = self.axes.imshow(image)
+            self.aspect0 = image.shape[0]/image.shape[1]
         else:
             self.image_handlers.set_data(image)
+            self.axes.set_aspect(image.shape[0]/image.shape[1]/self.aspect0)
             # amplitude and phase have dramatically different ranges, so rescaling is necessary
             if clim:
                 self.image_handlers.set_clim(clim)
