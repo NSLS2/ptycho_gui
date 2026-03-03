@@ -19,6 +19,10 @@ def update_window(w,live_path):
         try:
             _prb_live = np.load(prb_live_file)
             _obj_live = np.load(obj_live_file)
+
+            # Temporary
+            _obj_live = np.flip(_obj_live,1)
+
             if np.sum(np.abs(_prb_live))>0 and np.sum(np.abs(_obj_live))>0:
                 images = []
                 images.append(np.rot90(np.angle(_obj_live[0])))

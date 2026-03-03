@@ -208,7 +208,7 @@ def load_metadata(db, scan_num:int, det_name:str):
         # img = db.reg.retrieve(mds_table.iat[0])[0]
         # nx, ny = img.shape # can also give a ValueError; TODO: come up a better way!
     elif 'scan' in header.start:
-        if 'panda1' in header.start['scan']['detectors']:
+        if 'panda1' in header.start['scan']['detectors'] or 'panda2' in header.start['scan']['detectors']:
             scan_type = header.start['plan_name']
             scan_doc = header.start['scan']
             scan_motors = [scan_doc['fast_axis']['motor_name'], scan_doc['slow_axis']['motor_name']]
