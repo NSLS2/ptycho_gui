@@ -566,10 +566,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
 
             # this is needed because MPI processes need to know the working directory...
-            if self.param.gpu_flag and len(self.param.gpus) == 1 and self.param.gpus[0] == 0:
+            if self.param.gpu_flag and len(self.param.gpus) == 1:
                 param_live = self.param
             else:
-                raise NotImplementedError('Live recon currently only runs on single GPU and only GPU 0.')
+                raise NotImplementedError('Live recon currently only runs on single GPU.')
             
 
             param_live.x_range = self.sp_live_x_range_max.value()
@@ -2015,6 +2015,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
     @QtCore.pyqtSlot(str, QtGui.QColor)
     def on_stdout_message(self, message, color):
+        self.console_info.document().setMaximumBlockCount(10000)
         self.console_info.moveCursor(QtGui.QTextCursor.End)
         self.console_info.setTextColor(color)
         self.console_info.insertPlainText(message)
