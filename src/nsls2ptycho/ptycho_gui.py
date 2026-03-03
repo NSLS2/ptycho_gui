@@ -1035,7 +1035,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                             self.reconStepWindow.update_images(it, images)
                             self.reconStepWindow.update_metric(it, data)
 
-                        elif (it-1) % self.param.display_interval == 0 and self.param.remote_srv:
+                        elif (it) % self.param.display_interval == 0 and self.param.remote_srv:
                             if self.it_last - it < self.param.display_interval:
                                 tnow = time.time()
                                 live_path = os.path.join(os.path.abspath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+getpass.getuser())
