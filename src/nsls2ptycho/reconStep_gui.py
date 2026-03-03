@@ -41,6 +41,8 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
         self.canvas_object_chi.axis_on()
         self.canvas_probe_chi.reset()
         self.canvas_probe_chi.axis_on()
+        self.metric_buffer_it = []
+        self.metric_buffer = []
 
     def reset_window(self, obj_num=1, prb_num=1, result_type_num=1, iterations=50, slider_interval=1):
         """Called from outside"""
