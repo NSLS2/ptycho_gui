@@ -2661,6 +2661,19 @@
          </item>
         </layout>
        </widget>
+       <widget class="QCheckBox" name="ck_simulate_live_recon">
+        <property name="geometry">
+         <rect>
+          <x>10</x>
+          <y>240</y>
+          <width>311</width>
+          <height>41</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Simulate live reconstruction (using saved data)</string>
+        </property>
+       </widget>
       </widget>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
