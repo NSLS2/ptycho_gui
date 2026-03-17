@@ -385,6 +385,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p.batch_width = int(self.sp_batch_width.value())
         p.batch_height = int(self.sp_batch_height.value())
 
+        p.simulate_live_recon = self.ck_simulate_live_recon.isChecked()
         p.live_x_range_max = float(self.sp_live_x_range_max.value())
         p.live_y_range_max = float(self.sp_live_y_range_max.value())
         p.live_num_points_max = int(self.sp_live_num_points_max.value())
@@ -542,6 +543,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.sp_batch_height.setValue(p.batch_height)
 
         # Live recon
+        self.ck_simulate_live_recon.setChecked(p.simulate_live_recon)
         self.sp_live_x_range_max.setValue(p.live_x_range_max)
         self.sp_live_y_range_max.setValue(p.live_y_range_max)
         self.sp_live_num_points_max.setValue(p.live_num_points_max)
@@ -554,6 +556,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def start_live(self):
         try:
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+            self.check_XY_directions()
 
             self.param.live_recon_flag = True
             self.recon_bar.setValue(0)
@@ -571,14 +574,14 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             else:
                 raise NotImplementedError('Live recon currently only runs on single GPU.')
             
+            if not self.ck_simulate_live_recon.isChecked():
+                param_live.x_range = self.sp_live_x_range_max.value()
+                param_live.y_range = self.sp_live_y_range_max.value()
 
-            param_live.x_range = self.sp_live_x_range_max.value()
-            param_live.y_range = self.sp_live_y_range_max.value()
-
-            param_live.nx = self.sp_batch_width.value()
-            param_live.ny = self.sp_batch_height.value()
-            param_live.nz = self.sp_live_num_points_max.value()
-            param_live.lambda_nm = 1.2398/self.sp_live_energy.value()
+                param_live.nx = self.sp_batch_width.value()
+                param_live.ny = self.sp_batch_height.value()
+                param_live.nz = self.sp_live_num_points_max.value()
+                param_live.lambda_nm = 1.2398/self.sp_live_energy.value()
 
 
             save_config(self._config_path,self.param)
@@ -665,6 +668,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         snd = PtychoReconSlurmQueue(self.param,int(self.sp_slurm_n_parallel.value()))
         snd.send()
 
+    def check_XY_directions(self):
+        if self.param.x_direction != -1 or self.param.y_direction != -1:
+            print(f"################### WARNING ###################\n Coefficient for x direction is set to {self.param.x_direction} and y direction is set to x direction is set to {self.param.y_direction}, make sure these values are correct.")
+
     def start(self, batch_mode=False):
         if self._ptycho_gpu_thread is not None and self._ptycho_gpu_thread.isFinished():
             self._ptycho_gpu_thread = None
@@ -693,6 +700,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         return
 
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+            self.check_XY_directions()
             self.recon_bar.setValue(0)
             self.recon_bar.setMaximum(self.param.n_iterations)
 
@@ -874,11 +882,15 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 pass # nothing to clean up, we're done
 
 
-    def update_recon_step(self, it, data=None):
+    def update_recon_step(self, it, data=None,data2=None):
         try:
-            if data == 'flush':
+            if isinstance(data,str) and data.startswith('flush'):
                 self.reconStepWindow.image_buffer = {}
                 self.reconStepWindow.current_max_iters = 1
+                try:
+                    self.sp_scan_num.setValue(int(data.split()[1]))
+                except:
+                    pass
                 self.recon_bar.setValue(0)
                 self.reset_at_next = True
                 return

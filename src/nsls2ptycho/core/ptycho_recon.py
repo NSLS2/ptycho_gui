@@ -505,6 +505,9 @@ class PtychoReconLive(QtCore.QThread):
         else:
             raise NotImplementedError('Live recon on multiple gpus not implemented')
 
+        if param.simulate_live_recon:
+            holoscan_command.append('simulate')
+
         # for CuPy v8.0+
         os.environ['CUPY_ACCELERATORS'] = 'cub'
 
@@ -570,8 +573,8 @@ class PtychoReconLive(QtCore.QThread):
                                 pass
                         elif len(stdout) == 3 and stdout[0] == "shared" and update_fcn is not None:
                             update_fcn(-1, "init_mmap")
-                        elif len(stdout) == 3 and stdout[0] == "flush" and update_fcn is not None:
-                            update_fcn(-1, "flush")
+                        elif len(stdout) == 4 and stdout[0] == "flush" and update_fcn is not None:
+                            update_fcn(-1, f"flush {stdout[3]}")
                             scan_percentage = 0
                         elif len(stdout) == 3 and stdout[0] == "reload" and update_fcn is not None:
                             update_fcn(-1, "reload")
