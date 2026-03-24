@@ -620,7 +620,7 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
 
     # Check for missing detector frames
     try:
-        if np.size(raw_data_filename_abs) == 1:
+        if not save_diff and np.size(raw_data_filename_abs) == 1:
             with h5py.File(raw_data_filename_abs[0],'r',locking=False) as hdet:
                 if hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'].size < param.points.shape[1]:
                     print('Detected missing detector frame(s), correcting scan positions and ic...')
