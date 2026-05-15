@@ -56,7 +56,6 @@ matplotlib = ">=3.9"
 Cython = ">=3.0.11"
 pyFFTW = ">=0.15"
 pyqt5 = "*"
-#numba-cuda = {version = "*", extras = ["cu12"]}  # requires CUDA 12.9, incompatible with driver 550 (CUDA 12.4 max)
 hxntools = { git = "https://github.com/nsls-ii-hxn/hxntools.git" }
 
 [tasks]
@@ -77,8 +76,7 @@ nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_p
 system-requirements = {libc = { family = "glibc", version = "2.28" }}
 
 [feature.HXN_development.pypi-dependencies]
-#nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
-nsls2ptycho = { path = "./ptycho_gui", editable=true}
+nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
 #posix_ipc = "==1.1.1"
 
 [feature.HXN_development.tasks]
