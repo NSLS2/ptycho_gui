@@ -46,7 +46,7 @@ def scale_window(window, scale_factor):
         widget.setFixedSize(int(widget.width() * scale_factor), int(widget.height() * scale_factor))
         widget.move(int(widget.x() * scale_factor), int(widget.y() * scale_factor))
 
-if __name__ == '__main__':
+def main():
     app = QtWidgets.QApplication(sys.argv)
 
     if len(sys.argv) > 1:
@@ -69,3 +69,6 @@ if __name__ == '__main__':
     w.closeEvent = lambda event: event.accept()
 
     sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()
