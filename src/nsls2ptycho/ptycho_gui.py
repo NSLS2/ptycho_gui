@@ -1791,7 +1791,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.btn_view_frame.setEnabled(False)
 
         try:
-            print("loading from databroker...", end='')
+            print("loading from databroker...")
             QtWidgets.QApplication.processEvents()
             metadata = load_metadata(self.db,scan_id,det_name)
             self._setExpParamBroker(metadata)
@@ -1829,6 +1829,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         #if 'z_m' in metadata:
         #    print("[WARNING] Retrieved and updated the detector distance (from a hard-coded source).", file=sys.stderr)
         #    self.sp_detector_distance.setValue(metadata['z_m'])
+        self.le_x_motor_name.setText(metadata.get('x_motor_name', ''))
+        self.le_y_motor_name.setText(metadata.get('y_motor_name', ''))
         self.sp_x_arr_size.setValue(metadata['nx'])
         self.sp_y_arr_size.setValue(metadata['ny'])
         self.sp_num_points.setValue(metadata['nz'])
@@ -1912,6 +1914,12 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self.sp_ccd_pixel_um.setValue(f['ccd_pixel_um'][()])
             if 'angle' in f.keys():
                 self.sp_angle.setValue(f['angle'][()])
+            if 'x_motor_name' in f.keys():
+                self.le_x_motor_name.setText(str(f['x_motor_name'][()].decode()))
+                self.param.x_motor_name = str(f['x_motor_name'][()].decode())
+            if 'y_motor_name' in f.keys():
+                self.le_y_motor_name.setText(str(f['y_motor_name'][()].decode()))
+                self.param.y_motor_name = str(f['y_motor_name'][()].decode())
             else:
                 # self.sp_angle.setValue(15.) # backward compatibility for old datasets
                 # print("[WARNING] angle not found, assuming 15...", file=sys.stderr)

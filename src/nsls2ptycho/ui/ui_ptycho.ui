@@ -17,13 +17,25 @@
    <layout class="QVBoxLayout" name="verticalLayout_5">
     <item>
      <widget class="QGroupBox" name="groupBox_7">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
       <property name="title">
        <string>Data</string>
       </property>
       <layout class="QGridLayout" name="gridLayout_4">
+       <property name="verticalSpacing">
+        <number>3</number>
+       </property>
        <item row="0" column="1">
         <widget class="QWidget" name="LoadData" native="true">
          <layout class="QVBoxLayout" name="verticalLayout_2">
+          <property name="spacing">
+           <number>3</number>
+          </property>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout">
             <item>
@@ -222,29 +234,25 @@
        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_10">
+       <property name="spacing">
+        <number>2</number>
+       </property>
        <item>
         <layout class="QGridLayout" name="gridLayout_9">
-         <item row="3" column="4">
-          <widget class="QDoubleSpinBox" name="sp_y_scan_range">
-           <property name="decimals">
-            <number>4</number>
-           </property>
-           <property name="maximum">
-            <double>1000000.000000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="3">
-          <widget class="QLabel" name="label_44">
+         <property name="verticalSpacing">
+          <number>2</number>
+         </property>
+         <item row="3" column="0">
+          <widget class="QLabel" name="label_41">
            <property name="text">
-            <string>Y scan range (um)</string>
+            <string>X step size (um)</string>
            </property>
           </widget>
          </item>
          <item row="0" column="1">
           <widget class="QDoubleSpinBox" name="sp_xray_energy">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
@@ -257,12 +265,153 @@
            </property>
            <property name="maximumSize">
             <size>
-             <width>140</width>
+             <width>16777215</width>
              <height>16777215</height>
             </size>
            </property>
            <property name="decimals">
             <number>10</number>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QDoubleSpinBox" name="sp_x_scan_range">
+           <property name="decimals">
+            <number>4</number>
+           </property>
+           <property name="maximum">
+            <double>1000000.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_39">
+           <property name="text">
+            <string>X array size</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_43">
+           <property name="text">
+            <string>X scan range (um)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="le_x_motor_name">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="5">
+          <widget class="QDoubleSpinBox" name="sp_detector_distance">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>140</width>
+             <height>0</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>16777215</width>
+             <height>16777215</height>
+            </size>
+           </property>
+           <property name="decimals">
+            <number>4</number>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QComboBox" name="cb_scan_type">
+           <item>
+            <property name="text">
+             <string>mesh</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>spiral</string>
+            </property>
+           </item>
+           <item>
+            <property name="text">
+             <string>fly</string>
+            </property>
+           </item>
+          </widget>
+         </item>
+         <item row="4" column="4">
+          <widget class="QLabel" name="label_44">
+           <property name="text">
+            <string>Y scan range (um)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="5">
+          <widget class="QLineEdit" name="le_y_motor_name">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="5">
+          <widget class="QDoubleSpinBox" name="sp_y_scan_range">
+           <property name="decimals">
+            <number>4</number>
+           </property>
+           <property name="maximum">
+            <double>1000000.000000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="5">
+          <widget class="QSpinBox" name="sp_y_arr_size">
+           <property name="maximum">
+            <number>1000000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="5">
+          <widget class="QSpinBox" name="sp_num_points">
+           <property name="maximum">
+            <number>10000000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="label_45">
+           <property name="text">
+            <string>Scan type: </string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="4">
+          <widget class="QLabel" name="label_42">
+           <property name="text">
+            <string>Y step size (um)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QSpinBox" name="sp_x_arr_size">
+           <property name="maximum">
+            <number>1000000</number>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="4">
+          <widget class="QLabel" name="label_83">
+           <property name="text">
+            <string>Y motor name</string>
            </property>
           </widget>
          </item>
@@ -291,105 +440,34 @@
            </property>
           </widget>
          </item>
-         <item row="4" column="1">
-          <widget class="QComboBox" name="cb_scan_type">
-           <item>
-            <property name="text">
-             <string>mesh</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>spiral</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>fly</string>
-            </property>
-           </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_82">
+           <property name="text">
+            <string>X motor name</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="4">
+          <widget class="QLabel" name="label_46">
+           <property name="text">
+            <string>Numbers of points</string>
+           </property>
           </widget>
          </item>
          <item row="3" column="1">
-          <widget class="QDoubleSpinBox" name="sp_x_scan_range">
+          <widget class="QDoubleSpinBox" name="sp_x_step_size">
            <property name="decimals">
             <number>4</number>
+           </property>
+           <property name="minimum">
+            <double>-1000000.000000000000000</double>
            </property>
            <property name="maximum">
             <double>1000000.000000000000000</double>
            </property>
           </widget>
          </item>
-         <item row="1" column="4">
-          <widget class="QSpinBox" name="sp_y_arr_size">
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-          </widget>
-         </item>
          <item row="0" column="4">
-          <widget class="QDoubleSpinBox" name="sp_detector_distance">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>140</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>140</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <property name="decimals">
-            <number>4</number>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="0">
-          <widget class="QLabel" name="label_39">
-           <property name="text">
-            <string>X array size</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="label_43">
-           <property name="text">
-            <string>X scan range (um)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="label_41">
-           <property name="text">
-            <string>X step size (um)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="0" column="2">
-          <spacer name="horizontalSpacer_2">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeType">
-            <enum>QSizePolicy::Fixed</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>60</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-         <item row="0" column="3">
           <widget class="QLabel" name="label_38">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -414,42 +492,14 @@
            </property>
           </widget>
          </item>
-         <item row="2" column="3">
-          <widget class="QLabel" name="label_42">
-           <property name="text">
-            <string>Y step size (um)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="label_45">
-           <property name="text">
-            <string>Scan type: </string>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QSpinBox" name="sp_x_arr_size">
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="3">
-          <widget class="QLabel" name="label_46">
-           <property name="text">
-            <string>Numbers of points</string>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="4">
-          <widget class="QSpinBox" name="sp_num_points">
-           <property name="maximum">
-            <number>10000000</number>
-           </property>
-          </widget>
-         </item>
          <item row="2" column="4">
+          <widget class="QLabel" name="label_40">
+           <property name="text">
+            <string>Y array size</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="5">
           <widget class="QDoubleSpinBox" name="sp_y_step_size">
            <property name="decimals">
             <number>4</number>
@@ -462,25 +512,21 @@
            </property>
           </widget>
          </item>
-         <item row="1" column="3">
-          <widget class="QLabel" name="label_40">
-           <property name="text">
-            <string>Y array size</string>
+         <item row="0" column="3">
+          <spacer name="horizontalSpacer_2">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
            </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QDoubleSpinBox" name="sp_x_step_size">
-           <property name="decimals">
-            <number>4</number>
+           <property name="sizeType">
+            <enum>QSizePolicy::Fixed</enum>
            </property>
-           <property name="minimum">
-            <double>-1000000.000000000000000</double>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>60</width>
+             <height>20</height>
+            </size>
            </property>
-           <property name="maximum">
-            <double>1000000.000000000000000</double>
-           </property>
-          </widget>
+          </spacer>
          </item>
         </layout>
        </item>
@@ -724,65 +770,10 @@
             </property>
            </widget>
           </item>
-          <item row="1" column="3">
-           <widget class="QLineEdit" name="le_obj_path">
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QCheckBox" name="ck_init_obj_flag">
-            <property name="layoutDirection">
-             <enum>Qt::RightToLeft</enum>
-            </property>
-            <property name="text">
-             <string>Random start</string>
-            </property>
-            <property name="checked">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="3">
-           <widget class="QLineEdit" name="le_prb_path">
-            <property name="readOnly">
-             <bool>true</bool>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_9">
-            <property name="text">
-             <string>Probe initialization:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="4">
-           <widget class="QLabel" name="label_4">
-            <property name="text">
-             <string>propagation (um)</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="2">
-           <widget class="QPushButton" name="btn_load_probe">
-            <property name="text">
-             <string>Load probe</string>
-            </property>
-           </widget>
-          </item>
           <item row="1" column="2">
            <widget class="QPushButton" name="btn_load_object">
             <property name="text">
              <string>Load object</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="label_11">
-            <property name="text">
-             <string>Object initialization:</string>
             </property>
            </widget>
           </item>
@@ -802,6 +793,61 @@
             </property>
             <property name="maximum">
              <double>999999.998999999952503</double>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="3">
+           <widget class="QLineEdit" name="le_obj_path">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="btn_load_probe">
+            <property name="text">
+             <string>Load probe</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QCheckBox" name="ck_init_obj_flag">
+            <property name="layoutDirection">
+             <enum>Qt::RightToLeft</enum>
+            </property>
+            <property name="text">
+             <string>Random start</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_11">
+            <property name="text">
+             <string>Object initialization:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+           <widget class="QLineEdit" name="le_prb_path">
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="4">
+           <widget class="QLabel" name="label_4">
+            <property name="text">
+             <string>propagation (um)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_9">
+            <property name="text">
+             <string>Probe initialization:</string>
             </property>
            </widget>
           </item>

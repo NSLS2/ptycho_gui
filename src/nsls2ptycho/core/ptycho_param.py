@@ -44,9 +44,11 @@ class Param(object):
         self.nx = 0               # x_arr_size
         self.dr_x = 0.            # x_step_size
         self.x_range = 0.
+        self.x_motor_name = ''    # x motor name
         self.ny = 0               # y_arr_size
         self.dr_y = 0.            # y_step_size
         self.y_range = 0.
+        self.y_motor_name = ''    # y motor name
         self.scan_type = 'mesh'   # ['mesh', 'spiral', 'fly']
         self.nz = 0               # number of scan points
 
