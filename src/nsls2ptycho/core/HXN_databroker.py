@@ -190,12 +190,12 @@ def assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry):
     dr_x = 1.*x_range/x_num
     dr_y = 1.*y_range/y_num
 
-    # Correct for motor scaling
-    if motor_table:
-        if scan_motors[0] in motor_table:
-            dr_x *= np.abs(motor_table[x_motor_name][1]*1.e4)
-        if scan_motors[1] in motor_table:
-            dr_y *= np.abs(motor_table[y_motor_name][1]*1.e4)
+    ## Correct for motor scaling, need to be validated??
+    #if motor_table:
+    #    if scan_motors[0] in motor_table:
+    #        dr_x *= np.abs(motor_table[x_motor_name][1]*1.e4)
+    #    if scan_motors[1] in motor_table:
+    #        dr_y *= np.abs(motor_table[y_motor_name][1]*1.e4)
     return x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y
 
 
@@ -343,9 +343,34 @@ def load_metadata(db, scan_num:int, det_name:str):
             # get energy_kev
             dcm_th = bl.dcm_th[1]
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
-
             # get the scan range
             x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='scan')
+            print("x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
+
+            if scan_doc['type'].startswith('FIP'):
+                x_range = np.abs(scan_doc['scan_input'][1])
+                y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+                x_num = scan_doc['scan_input'][2]
+                y_num = scan_doc['scan_input'][5]       
+            else:
+                y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+                x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+                y_num = scan_doc['scan_input'][2]
+                x_num = scan_doc['scan_input'][5]        
+
+            # elif not header.start['plan_name'].startswith('pt_'):
+            #     x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+            #     y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+            #     x_num = scan_doc['scan_input'][2]
+            #     y_num = scan_doc['scan_input'][5]       
+            # get x_range, y_range, dr_x, dr_y
+            dr_x = 1.*x_range/x_num
+            dr_y = 1.*y_range/y_num
+            x_range = x_range
+            y_range = y_range
+            print("For reference: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
 
             # get points
             scan_dim = scan_doc['shape']
@@ -439,6 +464,25 @@ def load_metadata(db, scan_num:int, det_name:str):
 
             # get the scan range
             x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='')
+            print("x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
+            if scan_motors[0].endswith('ssy'):
+                y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+                x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+                y_num = scan_doc['scan_input'][2]
+                x_num = scan_doc['scan_input'][5]        
+            else:
+                x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+                y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+                x_num = scan_doc['scan_input'][2]
+                y_num = scan_doc['scan_input'][5]       
+            # get x_range, y_range, dr_x, dr_y
+            dr_x = 1.*x_range/x_num
+            dr_y = 1.*y_range/y_num
+            x_range = x_range
+            y_range = y_range
+            print("For reference: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
 
             # get points
             scan_dim = scan_doc['shape']
@@ -490,6 +534,16 @@ def load_metadata(db, scan_num:int, det_name:str):
             # get nx and ny by looking at the first image
             # img = db.reg.retrieve(mds_table.iat[0])[0]
             # nx, ny = img.shape # can also give a ValueError; TODO: come up a better way!
+    # Correct for motor scaling
+    if motor_table:
+        if scan_motors[0] in motor_table:
+            dr_x *= np.abs(motor_table[scan_motors[0]][1]*1.e4)
+            print("Correction applied to x axis using motor_table: ", scan_motors[0], motor_table[scan_motors[0]], ", dr_x after correction: ", dr_x)
+        if scan_motors[1] in motor_table:
+            dr_y *= np.abs(motor_table[scan_motors[1]][1]*1.e4)
+            print("Correction applied to y axis using motor_table: ", scan_motors[1], motor_table[scan_motors[1]], ", dr_y after correction: ", dr_y)
+    print("final: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+          ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)   
 
 
     handler = db.reg.get_spec_handler(mds_table.iat[0].split('/')[0])
@@ -514,6 +568,7 @@ def load_metadata(db, scan_num:int, det_name:str):
     metadata['y_range'] = y_range
     metadata['x_motor_name'] = x_motor_name
     metadata['y_motor_name'] = y_motor_name
+    metadata['scan_motors'] = scan_motors
     metadata['points'] = points
     metadata['angle'] = angle
     metadata['ic'] = ic
@@ -732,6 +787,7 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
         dset = hf.create_dataset('y_pixel_m', data=y_pixel_m)
         dset = hf.create_dataset('x_depth_field_m', data=x_depth_of_field_m)
         dset = hf.create_dataset('y_depth_field_m', data=y_depth_of_field_m)
+        dset = hf.create_dataset('scan_motors', data=param.scan_motors)
     
     try:
         os.chmod(file_path,0o666)

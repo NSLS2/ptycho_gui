@@ -51,6 +51,7 @@ class Param(object):
         self.y_motor_name = ''    # y motor name
         self.scan_type = 'mesh'   # ['mesh', 'spiral', 'fly']
         self.nz = 0               # number of scan points
+        self.scan_motors = []      # original scan motor names 
 
         ### [Reconstruction parameters] ###
         self.n_iterations = 50       # number of iterations
