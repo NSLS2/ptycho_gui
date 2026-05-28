@@ -76,7 +76,8 @@ nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_p
 system-requirements = {libc = { family = "glibc", version = "2.28" }}
 
 [feature.HXN_development.pypi-dependencies]
-nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
+nsls2ptycho = { path = "./ptycho_gui", editable=true}
+#nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
 #posix_ipc = "==1.1.1"
 
 [feature.HXN_development.tasks]
