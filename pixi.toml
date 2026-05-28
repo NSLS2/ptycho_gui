@@ -59,7 +59,7 @@ pyqt5 = "*"
 hxntools = { git = "https://github.com/nsls-ii-hxn/hxntools.git" }
 
 [tasks]
-#postinstall = "pip install --no-build-isolation -e /nsls2/data/hxn/legacy/users/data_analysis/ptycho_gui"
+postinstall = "pip install --no-build-isolation -e /nsls2/data/hxn/legacy/users/data_analysis/ptycho_gui"
 run-ptycho-viewer = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 python ./pixi_wrapper/run-ptycho-viewer.py"}
 run-ptycho = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 python ./pixi_wrapper/run-ptycho.py"}
 run-ptycho-worker = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 python ./pixi_wrapper/run-ptycho-worker.py"}
