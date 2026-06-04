@@ -512,7 +512,10 @@ class PtychoReconLive(QtCore.QThread):
         os.environ['CUPY_ACCELERATORS'] = 'cub'
 
         print(holoscan_command)
-                
+        if param.dr_x == 0 or param.dr_y == 0:
+            message = "dr_x or dr_y is set to 0, which may cause problems for live recon. Please load h5 file first or set them to the correct values if you are sure about them."
+            print("[WARNING] " + message, file=sys.stderr)
+            raise Exception(message)
         try:
             self.return_value = None
             scan_percentage = 0
