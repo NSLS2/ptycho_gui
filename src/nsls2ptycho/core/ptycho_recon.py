@@ -499,11 +499,13 @@ class PtychoReconLive(QtCore.QThread):
 
     def recon_api(self, param:Param, update_fcn=None):
         parent_module = '.'.join(self.__module__.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
-        # "1" is just a placeholder to be overwritten soon
-        if param.gpu_flag and len(param.gpus) == 1:
+        # Live recon supports single or dual GPU via live_gpu_iterative / live_gpu_ai params
+        if param.live_gpu_iterative is not None or param.live_gpu_ai is not None:
+            holoscan_command = ["python", "-W", "ignore", "-m",parent_module+".Holoptycho",self.config_file]
+        elif param.gpu_flag and len(param.gpus) == 1:
             holoscan_command = ["python", "-W", "ignore", "-m",parent_module+".Holoptycho",self.config_file]
         else:
-            raise NotImplementedError('Live recon on multiple gpus not implemented')
+            raise NotImplementedError('Live recon requires at least one GPU to be selected (iterative or AI).')
 
         if param.simulate_live_recon:
             holoscan_command.append('simulate')

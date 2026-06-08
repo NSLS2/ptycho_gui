@@ -1,5 +1,5 @@
 import sys
-from PyQt5 import QtWidgets
+from PyQt5 import QtCore, QtWidgets
 from .ui import ui_reconstep
 from .core.ptycho import utils
 
@@ -268,6 +268,75 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             for item in self.image_buffer[key]:
                 print("{} ".format(hex(id(item))), end='', file=sys.stderr)
             print("", file=sys.stderr)
+
+
+class VitStepWindow(QtWidgets.QMainWindow):
+    """Minimal two-panel window for AI inference live display (Phase + Amplitude).
+    Exposes canvas_object_pha and canvas_object_amp with the same API as
+    ReconStepWindow so _poll_vit_window() works without modification."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("AI Inference")
+        self.resize(1080, 570)
+
+        from .core.widgets.mplcanvas import MplCanvas
+
+        central = QtWidgets.QWidget(self)
+        self.setCentralWidget(central)
+
+        root = QtWidgets.QVBoxLayout(central)
+        root.setContentsMargins(2, 2, 2, 2)
+        root.setSpacing(2)
+
+        # --- two canvas columns ---
+        canvas_row = QtWidgets.QHBoxLayout()
+        canvas_row.setSpacing(2)
+
+        def _make_panel(label_text):
+            col = QtWidgets.QVBoxLayout()
+            col.setSpacing(1)
+            col.setContentsMargins(0, 0, 0, 0)
+            lbl = QtWidgets.QLabel(label_text)
+            font = lbl.font()
+            font.setBold(True)
+            lbl.setFont(font)
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+            lbl.setMaximumHeight(16)
+            canvas = MplCanvas(central, width=8, height=6, dpi=100)
+            canvas.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding,
+                QtWidgets.QSizePolicy.Expanding)
+            col.addWidget(lbl)
+            col.addWidget(canvas)
+            canvas_row.addLayout(col)
+            return canvas
+
+        self.canvas_object_pha = _make_panel("Phase")
+        self.canvas_object_amp = _make_panel("Amplitude")
+
+        root.addLayout(canvas_row, stretch=1)
+
+        # --- bottom bar: progress + close ---
+        bottom = QtWidgets.QHBoxLayout()
+        bottom.setContentsMargins(0, 0, 0, 0)
+        self.progressBar = QtWidgets.QProgressBar()
+        self.progressBar.setMaximumHeight(14)
+        self.progressBar.setValue(0)
+        btn_close = QtWidgets.QPushButton("Close")
+        btn_close.setFixedWidth(60)
+        btn_close.setMaximumHeight(18)
+        btn_close.clicked.connect(self.close)
+        bottom.addWidget(self.progressBar, stretch=1)
+        bottom.addWidget(btn_close)
+
+        root.addLayout(bottom)
+
+    def reset(self):
+        """Clear both canvases and reset progress bar (call on each new run)."""
+        self.canvas_object_pha.reset()
+        self.canvas_object_amp.reset()
+        self.progressBar.setValue(0)
 
 
 if __name__ == '__main__':

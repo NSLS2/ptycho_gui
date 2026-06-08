@@ -93,6 +93,11 @@ class Param(object):
         self.use_CUDA_MPI = False
         self.mpi_file_path = ''   # full path to a valid MPI machine file
 
+        ### [Live recon GPU assignment] ###
+        self.live_gpu_iterative = None  # None means OFF, integer means GPU index
+        self.live_gpu_ai = None         # None means OFF, integer means GPU index
+        self.vit_engine_path = ''       # path to TensorRT .engine file for AI inference
+
         ### [adv param group] ###
         self.ccd_pixel_um = 55.      # detector pixel size (um)
         self.distance = 0.           # multislice distance

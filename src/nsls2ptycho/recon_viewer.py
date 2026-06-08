@@ -35,6 +35,25 @@ def update_window(w,live_path):
             pass
     QTimer.singleShot(1000, lambda: update_window(w,live_path))
 
+def update_vit_window(w_vit, live_path):
+    vit_pha_file = os.path.join(live_path, 'vit_mosaic_latest.npy')
+    vit_amp_file = os.path.join(live_path, 'vit_mosaic_amp_latest.npy')
+    if (os.path.exists(vit_pha_file) and os.path.getsize(vit_pha_file) > 0 and
+            os.path.exists(vit_amp_file) and os.path.getsize(vit_amp_file) > 0):
+        try:
+            vit_pha = np.nan_to_num(np.load(vit_pha_file))
+            vit_amp = np.nan_to_num(np.load(vit_amp_file))
+            if np.sum(np.abs(vit_pha))>0 and np.sum(np.abs(vit_amp))>0:
+                pha_images = []
+                amp_images = []
+                pha_images.append(np.rot90(vit_pha))
+                amp_images.append(np.rot90(vit_amp))
+                w_vit.it_ondisplay = -1
+                w_vit.update_images(0, [pha_images, amp_images])
+        except:
+            pass
+    QTimer.singleShot(1000, lambda: update_vit_window(w_vit, live_path))
+
 def scale_window(window, scale_factor):
     geometry = window.geometry()
     window.setGeometry(geometry.x(), geometry.y(),
@@ -61,12 +80,20 @@ def main():
 
 
     w = ReconStepWindow()
-
+    w.setWindowTitle("Iterative Reconstruction")
     scale_window(w,scale_factor)
     update_window(w,live_path)
     w.show()
 
+    w_vit = ReconStepWindow(prb_num=0)
+    w_vit.setWindowTitle("AI Inference")
+    scale_window(w_vit, scale_factor)
+    w_vit.move(w.geometry().x() + w.geometry().width(), w.geometry().y())
+    update_vit_window(w_vit, live_path)
+    w_vit.show()
+
     w.closeEvent = lambda event: event.accept()
+    w_vit.closeEvent = lambda event: event.accept()
 
     sys.exit(app.exec_())
 

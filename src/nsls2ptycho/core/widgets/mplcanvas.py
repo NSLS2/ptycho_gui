@@ -84,6 +84,8 @@ class MplCanvas(FigureCanvas):
         if self.image_handlers is None:
             self.image_handlers = self.axes.imshow(image)
             self.aspect0 = image.shape[0]/image.shape[1]
+            if clim:
+                self.image_handlers.set_clim(clim)
         else:
             self.image_handlers.set_data(image)
             self.axes.set_aspect(image.shape[0]/image.shape[1]/self.aspect0)
