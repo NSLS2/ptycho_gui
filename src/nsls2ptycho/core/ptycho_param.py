@@ -97,6 +97,8 @@ class Param(object):
         self.live_gpu_iterative = None  # None means OFF, integer means GPU index
         self.live_gpu_ai = None         # None means OFF, integer means GPU index
         self.vit_engine_path = ''       # path to TensorRT .engine file for AI inference
+        self.vit_normalization_guess = 1000.0  # fallback ViT normalization before auto-compute
+        self.save_vit_batch_files = False        # save per-batch vit_batch_*.npy files
 
         ### [adv param group] ###
         self.ccd_pixel_um = 55.      # detector pixel size (um)

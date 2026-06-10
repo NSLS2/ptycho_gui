@@ -93,3 +93,8 @@ pyzmq = ">=26.0"
 holoscan = "==3.1.*"
 dectris-compression = ">=0.3"
 #posix_ipc = "==1.1.1"
+
+[feature.holoscan.tasks]
+# Build the container image (if missing) and launch the ptycho GUI inside it.
+# Usage: pixi run -e holoscan launch
+launch = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/HoloScanContainerAIInference/holoscan-framework/launch_holoscan_gui.sh" }

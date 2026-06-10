@@ -403,6 +403,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         _ai_text = self.cb_live_gpu_ai.currentText()
         p.live_gpu_ai = None if _ai_text == "OFF" else int(_ai_text)
         p.vit_engine_path = self.le_vit_engine_path.text().strip()
+        p.vit_normalization_guess = float(self.sp_vit_norm_guess.value())
+        p.save_vit_batch_files = self.cb_save_vit_batch.isChecked()
 
         p.batch_badpixel_file = self.le_batch_badpixel.text()
 
@@ -569,6 +571,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         idx = self.cb_live_gpu_ai.findText("OFF" if p.live_gpu_ai is None else str(p.live_gpu_ai))
         self.cb_live_gpu_ai.setCurrentIndex(max(0, idx))
         self.le_vit_engine_path.setText(p.vit_engine_path if p.vit_engine_path else '')
+        self.sp_vit_norm_guess.setValue(getattr(p, 'vit_normalization_guess', 1000.0))
+        self.cb_save_vit_batch.setChecked(getattr(p, 'save_vit_batch_files', False))
         
         self.le_batch_badpixel.setText(p.batch_badpixel_file)
 
@@ -619,7 +623,11 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
                 param_live.nx = self.sp_batch_width.value()
                 param_live.ny = self.sp_batch_height.value()
-                param_live.nz = self.sp_live_num_points_max.value()
+                # Only override nz if the user explicitly set a limit (> 0).
+                # When 0, keep param.nz from the loaded H5 file so GPU buffers
+                # are properly sized — mirrors what simulate mode does.
+                if self.sp_live_num_points_max.value() > 0:
+                    param_live.nz = self.sp_live_num_points_max.value()
                 param_live.lambda_nm = 1.2398/self.sp_live_energy.value()
 
 
@@ -732,11 +740,22 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                     return  # file unchanged since last poll, skip
                 self._vit_mosaic_mtime = mtime
 
-                vit_pha = np.rot90(np.load(vit_pha_file))  # keep NaN for visual masking
+                vit_pha = np.rot90(np.load(vit_pha_file))
                 vit_amp = np.rot90(np.load(vit_amp_file))
 
+                # Crop to bounding box of non-NaN pixels so only the scanned
+                # region fills the canvas (shared mask — both mosaics are aligned)
+                finite_mask = np.isfinite(vit_pha)
+                rows = np.any(finite_mask, axis=1)
+                cols = np.any(finite_mask, axis=0)
+                if rows.any() and cols.any():
+                    r0, r1 = np.where(rows)[0][[0, -1]]
+                    c0, c1 = np.where(cols)[0][[0, -1]]
+                    vit_pha = vit_pha[r0:r1+1, c0:c1+1]
+                    vit_amp = vit_amp[r0:r1+1, c0:c1+1]
+
                 # Clim from 1st/99th percentile of the central 50%
-                # crop (H/4:3H/4, W/4:3W/4) to avoid edge/NaN artefacts biasing scale
+                # crop (H/4:3H/4, W/4:3W/4) to avoid edge artefacts biasing scale
                 H, W = vit_pha.shape
                 h0, h1 = H // 4, 3 * H // 4
                 w0, w1 = W // 4, 3 * W // 4
@@ -752,6 +771,23 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                     clim_amp = (float(np.percentile(valid_amp, 1)),
                                 float(np.percentile(valid_amp, 99)))
                     self.vitStepWindow.canvas_object_amp.update_image(vit_amp, clim_amp)
+
+                diff_avg_file = os.path.join(vit_live_dir, 'diff_avg_latest.npy')
+                if (hasattr(self.vitStepWindow, 'canvas_diffraction') and
+                        os.path.exists(diff_avg_file) and os.path.getsize(diff_avg_file) > 0):
+                    diff_avg = np.load(diff_avg_file)
+                    self.vitStepWindow.canvas_diffraction.update_image(
+                        np.log1p(diff_avg).astype(np.float32))
+
+                # Update progress bar
+                progress_file = os.path.join(vit_live_dir, 'vit_progress.npy')
+                if (hasattr(self.vitStepWindow, 'progressBar') and
+                        os.path.exists(progress_file) and os.path.getsize(progress_file) > 0):
+                    progress = np.load(progress_file)
+                    done, total = int(progress[0]), int(progress[1])
+                    if total > 0:
+                        self.vitStepWindow.progressBar.setValue(
+                            min(100, int(100 * done / total)))
             except:
                 pass
 

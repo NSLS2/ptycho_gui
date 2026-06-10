@@ -278,7 +278,7 @@ class VitStepWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("AI Inference")
-        self.resize(1080, 570)
+        self.resize(1620, 570)
 
         from .core.widgets.mplcanvas import MplCanvas
 
@@ -314,6 +314,7 @@ class VitStepWindow(QtWidgets.QMainWindow):
 
         self.canvas_object_pha = _make_panel("Phase")
         self.canvas_object_amp = _make_panel("Amplitude")
+        self.canvas_diffraction = _make_panel("Averaged Diffraction Pattern (90-deg CW rotated)")
 
         root.addLayout(canvas_row, stretch=1)
 
@@ -336,6 +337,7 @@ class VitStepWindow(QtWidgets.QMainWindow):
         """Clear both canvases and reset progress bar (call on each new run)."""
         self.canvas_object_pha.reset()
         self.canvas_object_amp.reset()
+        self.canvas_diffraction.reset()
         self.progressBar.setValue(0)
 
 
