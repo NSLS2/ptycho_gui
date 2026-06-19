@@ -105,10 +105,12 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             images_to_show = self.image_buffer[it]
             object_image = self._fetch_images(it, images_to_show, 'obj_amp')
             if object_image is not None:
-                self.canvas_object_amp.update_image(object_image)
+                clim = self._compute_percentile_clim(object_image)
+                self.canvas_object_amp.update_image(object_image, clim)
             object_image = self._fetch_images(it, images_to_show, 'obj_pha')
             if object_image is not None:
-                self.canvas_object_pha.update_image(object_image)
+                clim = self._compute_percentile_clim(object_image)
+                self.canvas_object_pha.update_image(object_image, clim)
 
     def cb_image_probe_op(self, idx):
         it = self.sb_iter.value()
@@ -118,10 +120,12 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             images_to_show = self.image_buffer[it]
             probe_image_amp = self._fetch_images(it, images_to_show, 'prb_amp')
             if probe_image_amp is not None:
-                self.canvas_probe_amp.update_image(probe_image_amp)
+                clim = self._compute_percentile_clim(probe_image_amp)
+                self.canvas_probe_amp.update_image(probe_image_amp, clim)
             probe_image_pha = self._fetch_images(it, images_to_show, 'prb_pha')
             if probe_image_pha is not None:
-                self.canvas_probe_pha.update_image(probe_image_pha)
+                clim = self._compute_percentile_clim(probe_image_pha)
+                self.canvas_probe_pha.update_image(probe_image_pha, clim)
             if probe_image_amp is not None and probe_image_pha is not None:
                 probe_image_comp = utils.imRGB_from_comp(probe_image_amp,probe_image_pha)
                 self.canvas_probe_comp.update_image(probe_image_comp)
@@ -167,6 +171,25 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             self.slider_iters.setValue(it)
             self.sb_iter.setValue(it)
 
+    def _compute_percentile_clim(self, image):
+        """Compute clim from 1st/99th percentile of central 50% of image.
+        Returns (vmin, vmax) tuple, or None if image is invalid."""
+        if image is None or image.size == 0:
+            return None
+        
+        H, W = image.shape
+        h0, h1 = H // 8, 7 * H // 8
+        w0, w1 = W // 4, 3 * W // 4
+        
+        crop = image[h0:h1, w0:w1]
+        # Extract valid (finite, non-NaN) pixels
+        valid = crop[np.isfinite(crop)]
+        
+        if valid.size == 0:
+            return None
+        
+        return (float(np.percentile(valid, 1)), float(np.percentile(valid, 99)))
+
     def update_images(self, it, images=None):
         try:
             if images is not None:
@@ -191,16 +214,20 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                 object_image_amp = self._fetch_images(it, images_to_show, 'obj_amp')
                 probe_image_amp = self._fetch_images(it, images_to_show, 'prb_amp')
                 if object_image_amp is not None:
-                    self.canvas_object_amp.update_image(object_image_amp) #,[0.75,1])
+                    clim = self._compute_percentile_clim(object_image_amp)
+                    self.canvas_object_amp.update_image(object_image_amp, clim)
                 if probe_image_amp is not None:
-                    self.canvas_probe_amp.update_image(probe_image_amp)
+                    clim = self._compute_percentile_clim(probe_image_amp)
+                    self.canvas_probe_amp.update_image(probe_image_amp, clim)
 
                 object_image_pha = self._fetch_images(it, images_to_show, 'obj_pha')
                 probe_image_pha = self._fetch_images(it, images_to_show, 'prb_pha')
                 if object_image_pha is not None:
-                    self.canvas_object_pha.update_image(object_image_pha) #,[-0.1,0.2])
+                    clim = self._compute_percentile_clim(object_image_pha)
+                    self.canvas_object_pha.update_image(object_image_pha, clim)
                 if probe_image_pha is not None:
-                    self.canvas_probe_pha.update_image(probe_image_pha)
+                    clim = self._compute_percentile_clim(probe_image_pha)
+                    self.canvas_probe_pha.update_image(probe_image_pha, clim)
 
                 #if object_image_amp is not None and object_image_pha is not None:
                 #    object_image_comp = utils.imRGB_from_comp(object_image_amp,object_image_pha,(0.95,0.05))
