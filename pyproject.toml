@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -15,7 +15,7 @@ authors = [
 ]
 readme = "README.md"
 license-files = ["LICENSE"]
-dynamic = ["version","dependencies"]
+dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/NSLS2/ptycho_gui"

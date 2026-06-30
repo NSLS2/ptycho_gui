@@ -90,6 +90,7 @@ class PtychoReconRemote(QtCore.QThread):
         self.uuid = param.uuid
 
         self.return_value = None
+        self.killed = False
 
         self.remote_path = os.path.join(os.path.realpath(self.param.working_directory),'remote_'+self.param.remote_srv+'_'+getpass.getuser())
         if not os.path.isdir(self.remote_path):
@@ -237,7 +238,7 @@ class PtychoReconRemote(QtCore.QThread):
             pass
         else:
             # let preview window load results
-            if self.param.preview_flag and self.return_value==0:
+            if self.param.preview_flag and self.return_value==0 and not self.killed:
                 self.update_signal.emit(-2,None)
             
         finally:
@@ -246,6 +247,7 @@ class PtychoReconRemote(QtCore.QThread):
             print('finally?')
 
     def kill(self):
+        self.killed = True
         if os.path.isdir(self.remote_path):
             with open(os.path.join(self.remote_path,'abort'+self.uuid),'w') as f:
                 pass
@@ -263,6 +265,7 @@ class PtychoReconWorker(QtCore.QThread):
         super().__init__(parent)
         self.param = param
         self.return_value = None
+        self.killed = False
 
     def _parse_message(self, tokens):
         def _parser(current, upper_limit, target_list):
@@ -418,13 +421,14 @@ class PtychoReconWorker(QtCore.QThread):
             pass
         else:
             # let preview window load results
-            if self.param.preview_flag and self.return_value == 0:
-                self.update_signal.emit(self.param.n_iterations+1, None)
+            if self.param.preview_flag and self.return_value == 0 and not self.killed:
+                self.update_signal.emit(-2, None)
         finally:
             print('finally?')
 
     def kill(self):
         if self.process is not None:
+            self.killed = True
             print('killing the subprocess...')
             self.process.terminate()
             self.process.wait()
@@ -438,6 +442,7 @@ class PtychoReconLive(QtCore.QThread):
         self.param = param
         self.config_file = parent._config_path
         self.return_value = None
+        self.killed = False
 
     def _parse_message(self, tokens):
         def _parser(current, upper_limit, target_list):
@@ -494,17 +499,25 @@ class PtychoReconLive(QtCore.QThread):
 
     def recon_api(self, param:Param, update_fcn=None):
         parent_module = '.'.join(self.__module__.rsplit('.', 2)[:-1]) # get parent module name to run the correct recon worker
-        # "1" is just a placeholder to be overwritten soon
-        if param.gpu_flag and len(param.gpus) == 1:
+        # Live recon supports single or dual GPU via live_gpu_iterative / live_gpu_ai params
+        if param.live_gpu_iterative is not None or param.live_gpu_ai is not None:
+            holoscan_command = ["python", "-W", "ignore", "-m",parent_module+".Holoptycho",self.config_file]
+        elif param.gpu_flag and len(param.gpus) == 1:
             holoscan_command = ["python", "-W", "ignore", "-m",parent_module+".Holoptycho",self.config_file]
         else:
-            raise NotImplementedError('Live recon on multiple gpus not implemented')
+            raise NotImplementedError('Live recon requires at least one GPU to be selected (iterative or AI).')
+
+        if param.simulate_live_recon:
+            holoscan_command.append('simulate')
 
         # for CuPy v8.0+
         os.environ['CUPY_ACCELERATORS'] = 'cub'
 
         print(holoscan_command)
-                
+        if param.dr_x == 0 or param.dr_y == 0:
+            message = "dr_x or dr_y is set to 0, which may cause problems for live recon. Please load h5 file first or set them to the correct values if you are sure about them."
+            print("[WARNING] " + message, file=sys.stderr)
+            raise Exception(message)
         try:
             self.return_value = None
             scan_percentage = 0
@@ -557,13 +570,16 @@ class PtychoReconLive(QtCore.QThread):
                                 else: # counter > 3, we read one more line!
                                     raise Exception("parsing error")
                           
-                            it, result = self._parse_message(stdout)
-                            #print(result['probe_chi'])
-                            update_fcn(it+1, result)
+                            try:
+                                it, result = self._parse_message(stdout)
+                                #print(result['probe_chi'])
+                                update_fcn(it+1, result)
+                            except:
+                                pass
                         elif len(stdout) == 3 and stdout[0] == "shared" and update_fcn is not None:
                             update_fcn(-1, "init_mmap")
-                        elif len(stdout) == 3 and stdout[0] == "flush" and update_fcn is not None:
-                            update_fcn(-1, "flush")
+                        elif len(stdout) == 4 and stdout[0] == "flush" and update_fcn is not None:
+                            update_fcn(-1, f"flush {stdout[3]}")
                             scan_percentage = 0
                         elif len(stdout) == 3 and stdout[0] == "reload" and update_fcn is not None:
                             update_fcn(-1, "reload")
@@ -607,13 +623,14 @@ class PtychoReconLive(QtCore.QThread):
             pass
         else:
             # let preview window load results
-            if self.param.preview_flag and self.return_value == 0:
-                self.update_signal.emit(self.param.n_iterations+1, None)
+            if self.param.preview_flag and self.return_value == 0 and not self.killed:
+                self.update_signal.emit(-2, None)
         finally:
             print('finally?')
 
     def kill(self):
         if self.process is not None:
+            self.killed = True
             print('killing the subprocess...')
             self.process.terminate()
             self.process.wait()

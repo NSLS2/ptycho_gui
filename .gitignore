@@ -1,11 +1,19 @@
-__pycache__
+
 *.cubin
 *.nvprof
 *.pyc
 *.npy
+*.out
 
 .idea
 .vscode
 
+# Python packaging / build artifacts
+__pycache__
 build/
-nsls2ptycho.egg-info/
+dist/
+*.egg-info/
+
+# Pixi
+.pixi/
+pixi.lock

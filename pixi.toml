@@ -1,0 +1,100 @@
+[workspace]
+authors = [
+  "Leo Fang <leofang@bnl.gov>",
+  "Sungsoo Ha",
+  "Zhihua Dong <zdong@bnl.gov>",
+  "Zirui Gao",
+  "Takenori Shimamura <tshimamur1@bnl.gov>",
+  "Xiaojing Huang <xjhuang@bnl.gov>",
+]
+channels = ["conda-forge"]
+description = "pixi environment for NSLS-II ptycho_gui without holoscan by TS"
+name = "NSLS-II Ptycho GUI"
+platforms = ["linux-64"]
+version = "2.3.2+pixi"
+
+[environments]
+default = {features = ["HXN_production"], solve-group = "production"}
+production = {features = ["HXN_production"], solve-group = "production"}
+development = {features = ["HXN_development"], solve-group = "development"}
+holoscan = {features = ["HXN_development", "holoscan"], solve-group = "holoscan"}
+
+
+
+[dependencies]
+python = ">=3.11,<3.12"
+posix_ipc = "*"
+numpy = ">=1.20,<1.27"
+ipython = ">=8.28.0,<9"
+cbor2 = "==5.6.4"
+databroker = "==2.0.0"
+h5py = "==3.12.1"
+cuda-cudart = ">=12.4,<13"
+libcublas = ">=12.4,<13"
+libcufft = "*"
+libcurand = "*"
+libcusolver = "*"
+libgl = "*"
+scipy = ">=1.14"
+gcc = "==11.4"
+gxx = "==11.4"
+gcc_linux-64 = "==11.4"
+gxx_linux-64 = "==11.4"
+mpi4py = ">=4.0.1"
+nvtx = "==0.2.10"
+cupy = "*"
+git = "*"
+cuda-version = ">=12.4"
+openmpi = "*"
+pillow = "*"
+setuptools = "*"
+numba-cuda = "*" 
+
+
+[pypi-dependencies]
+matplotlib = ">=3.9"
+Cython = ">=3.0.11"
+pyFFTW = ">=0.15"
+pyqt5 = "*"
+hxntools = { git = "https://github.com/nsls-ii-hxn/hxntools.git" }
+
+[tasks]
+postinstall = "pip install --no-build-isolation -e /nsls2/data/hxn/legacy/users/data_analysis/ptycho_gui"
+run-ptycho-viewer = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 QT_XCB_GL_INTEGRATION=none python ./pixi_wrapper/run-ptycho-viewer.py"}
+run-ptycho = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 QT_XCB_GL_INTEGRATION=none python ./pixi_wrapper/run-ptycho.py"}
+run-ptycho-worker = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 python ./pixi_wrapper/run-ptycho-worker.py"}
+
+
+[feature.HXN_production]
+system-requirements = {libc = { family = "glibc", version = "2.28" }}
+
+[feature.HXN_production.pypi-dependencies]
+nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_production"}
+#posix_ipc = "==1.1.1"
+
+[feature.HXN_development]
+system-requirements = {libc = { family = "glibc", version = "2.28" }}
+
+[feature.HXN_development.pypi-dependencies]
+nsls2ptycho = { path = ".", editable=true}
+#nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
+#posix_ipc = "==1.1.1"
+
+[feature.HXN_development.tasks]
+run-ptycho-development = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 QT_XCB_GL_INTEGRATION=none python ./pixi_wrapper/run-ptycho.py"}
+run-ptycho-development-worker = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 python ./pixi_wrapper/run-ptycho-worker.py"}
+
+[feature.holoscan]
+system-requirements = {libc = { family = "glibc", version = "2.35" }}
+
+[feature.holoscan.pypi-dependencies]
+#nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
+pyzmq = ">=26.0"
+holoscan = "==3.1.*"
+dectris-compression = ">=0.3"
+#posix_ipc = "==1.1.1"
+
+[feature.holoscan.tasks]
+# Build the container image (if missing) and launch the ptycho GUI inside it.
+# Usage: pixi run -e holoscan launch
+launch = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/HoloScanContainerAIInference/holoscan-framework/launch_holoscan_gui.sh" }

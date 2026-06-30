@@ -96,6 +96,108 @@ def array_ensure_positive_elements(arr, name="array"):
             f"The {name} contains no positive non-zero values. Computations are likely to fail."
         )
 
+def assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry):
+    '''
+    Determine which motor corresponds to the horizontal (x) and vertical (y) axis of the scan, and get the scan range and step size for each axis.
+    For Panda-based scans, the setting was originally:
+        if scan_doc['type'].startswith('FIP'):
+            x_range = np.abs(scan_doc['scan_input'][1])
+            y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+            x_num = scan_doc['scan_input'][2]
+            y_num = scan_doc['scan_input'][5]       
+        else:
+            y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+            x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+            y_num = scan_doc['scan_input'][2]
+            x_num = scan_doc['scan_input'][5]  
+    For others, the setting was originally:
+        if scan_motors[0].endswith('ssy'):
+            y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+            x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+            y_num = scan_doc['scan_input'][2]
+            x_num = scan_doc['scan_input'][5]        
+        else:
+            x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+            y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+            x_num = scan_doc['scan_input'][2]
+            y_num = scan_doc['scan_input'][5] 
+
+    
+    '''
+    if start_entry == 'scan':
+        # determine which axis is horizontal and vertical for Panda-based scans
+        scan_input_range_num = {
+            'FIP': { 
+                'fast_axis': {'range':np.abs(scan_doc['scan_input'][1])                            , 'num':scan_doc['scan_input'][2]}, 
+                'slow_axis': {'range':np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3]), 'num':scan_doc['scan_input'][5]} 
+                },
+            'other': { 
+                'fast_axis': {'range':np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0]), 'num':scan_doc['scan_input'][2]}, 
+                'slow_axis': {'range':np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3]), 'num':scan_doc['scan_input'][5]}
+                } 
+            }
+        if scan_motors[0].lower().endswith('x') or scan_motors[0].lower().endswith('z'):
+            # traditionally the first motor is the horizontal one, but for FIP it is reversed
+            scan_dir_to_axis ={'FIP':
+                               {'x': 'fast_axis', 'y': 'slow_axis'},
+                               'other':
+                               {'x': 'slow_axis', 'y': 'fast_axis'}
+                               }
+        elif scan_motors[0].lower().endswith('y'):
+            # this will never happen for FIP, but just in case there is a scan with y as the first motor, we will treat it as the vertical one
+            scan_dir_to_axis ={'FIP':
+                               {'x': 'slow_axis', 'y': 'fast_axis'},
+                               'other':
+                               {'x': 'fast_axis', 'y': 'slow_axis'}
+                               }
+        else:
+            print(scan_motors)
+            raise NotImplementedError("Cannot determine the scan axis for the motors! Please check the motor names and update the code if necessary.")
+    else:
+        if scan_motors[0].lower().endswith('x') or scan_motors[0].lower().endswith('z'):
+            scan_dir_to_axis ={'other':
+                               {'x': 'fast_axis', 'y': 'slow_axis'}
+                               }
+        elif scan_motors[0].lower().endswith('y'):
+            scan_dir_to_axis ={'other':
+                               {'x': 'slow_axis', 'y': 'fast_axis'}
+                               }
+        else:
+            print(scan_motors)
+            raise NotImplementedError("Cannot determine the scan axis for the motors! Please check the motor names and update the code if necessary.")
+
+    if scan_doc['type'].startswith('FIP'):
+        tmptype = 'FIP'
+        #x_range = np.abs(scan_doc['scan_input'][1]) originally this was used for FIP, but scan_input[0] is always 0
+    else:
+        tmptype = 'other'
+    x_range = scan_input_range_num[tmptype][scan_dir_to_axis[tmptype]['x']]['range']
+    y_range = scan_input_range_num[tmptype][scan_dir_to_axis[tmptype]['y']]['range']
+    x_num   = scan_input_range_num[tmptype][scan_dir_to_axis[tmptype]['x']]['num']
+    y_num   = scan_input_range_num[tmptype][scan_dir_to_axis[tmptype]['y']]['num']
+    x_motor_name = scan_doc[scan_dir_to_axis[tmptype]['x']]['motor_name']
+    y_motor_name = scan_doc[scan_dir_to_axis[tmptype]['y']]['motor_name']
+    print("x axis: ", scan_dir_to_axis[tmptype]['x'], "(", x_motor_name, ")",\
+        ", y axis: ", scan_dir_to_axis[tmptype]['y'], "(", y_motor_name, ")")
+
+    # elif not header.start['plan_name'].startswith('pt_'):
+    #     x_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
+    #     y_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
+    #     x_num = scan_doc['scan_input'][2]
+    #     y_num = scan_doc['scan_input'][5]       
+    # get x_range, y_range, dr_x, dr_y
+    # get x_range, y_range, dr_x, dr_y
+    dr_x = 1.*x_range/x_num
+    dr_y = 1.*y_range/y_num
+
+    ## Correct for motor scaling, need to be validated??
+    #if motor_table:
+    #    if scan_motors[0] in motor_table:
+    #        dr_x *= np.abs(motor_table[x_motor_name][1]*1.e4)
+    #    if scan_motors[1] in motor_table:
+    #        dr_y *= np.abs(motor_table[y_motor_name][1]*1.e4)
+    return x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y
+
 
 def load_metadata(db, scan_num:int, det_name:str):
     '''
@@ -241,6 +343,10 @@ def load_metadata(db, scan_num:int, det_name:str):
             # get energy_kev
             dcm_th = bl.dcm_th[1]
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
+            # get the scan range
+            x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='scan')
+            print("x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
 
             if scan_doc['type'].startswith('FIP'):
                 x_range = np.abs(scan_doc['scan_input'][1])
@@ -263,6 +369,8 @@ def load_metadata(db, scan_num:int, det_name:str):
             dr_y = 1.*y_range/y_num
             x_range = x_range
             y_range = y_range
+            print("For reference: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
 
             # get points
             scan_dim = scan_doc['shape']
@@ -354,6 +462,10 @@ def load_metadata(db, scan_num:int, det_name:str):
             dcm_th = bl.dcm_th[1]
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
 
+            # get the scan range
+            x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='')
+            print("x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
             if scan_motors[0].endswith('ssy'):
                 y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
                 x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
@@ -369,6 +481,8 @@ def load_metadata(db, scan_num:int, det_name:str):
             dr_y = 1.*y_range/y_num
             x_range = x_range
             y_range = y_range
+            print("For reference: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
 
             # get points
             scan_dim = scan_doc['shape']
@@ -420,13 +534,17 @@ def load_metadata(db, scan_num:int, det_name:str):
             # get nx and ny by looking at the first image
             # img = db.reg.retrieve(mds_table.iat[0])[0]
             # nx, ny = img.shape # can also give a ValueError; TODO: come up a better way!
-
     # Correct for motor scaling
     if motor_table:
         if scan_motors[0] in motor_table:
             dr_x *= np.abs(motor_table[scan_motors[0]][1]*1.e4)
+            print("Correction applied to x axis using motor_table: ", scan_motors[0], motor_table[scan_motors[0]], ", dr_x after correction: ", dr_x)
         if scan_motors[1] in motor_table:
             dr_y *= np.abs(motor_table[scan_motors[1]][1]*1.e4)
+            print("Correction applied to y axis using motor_table: ", scan_motors[1], motor_table[scan_motors[1]], ", dr_y after correction: ", dr_y)
+    print("final: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
+          ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)   
+
 
     handler = db.reg.get_spec_handler(mds_table.iat[0].split('/')[0])
     if hasattr(handler,'_filename'):
@@ -448,6 +566,9 @@ def load_metadata(db, scan_num:int, det_name:str):
     metadata['dr_y'] = dr_y
     metadata['x_range'] = x_range
     metadata['y_range'] = y_range
+    metadata['x_motor_name'] = x_motor_name
+    metadata['y_motor_name'] = y_motor_name
+    metadata['scan_motors'] = scan_motors
     metadata['points'] = points
     metadata['angle'] = angle
     metadata['ic'] = ic
@@ -620,7 +741,7 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
 
     # Check for missing detector frames
     try:
-        if np.size(raw_data_filename_abs) == 1:
+        if not save_diff and np.size(raw_data_filename_abs) == 1:
             with h5py.File(raw_data_filename_abs[0],'r',locking=False) as hdet:
                 if hdet['/entry/instrument/NDAttributes/NDArrayUniqueId'].size < param.points.shape[1]:
                     print('Detected missing detector frame(s), correcting scan positions and ic...')
@@ -651,6 +772,8 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
             dset = hf.create_dataset('raw_data/threshold',data=threshold)
             dset = hf.create_dataset('raw_data/upsample',data=upsample)           
         dset = hf.create_dataset('points', data=param.points)
+        dset = hf.create_dataset('x_motor_name', data=param.x_motor_name)
+        dset = hf.create_dataset('y_motor_name', data=param.y_motor_name)
         dset = hf.create_dataset('x_range', data=param.x_range)
         dset = hf.create_dataset('y_range', data=param.y_range)
         dset = hf.create_dataset('dr_x', data=param.dr_x)
@@ -664,6 +787,7 @@ def save_data(db, param, scan_num:int, n:int, nn:int, cx:int, cy:int, threshold=
         dset = hf.create_dataset('y_pixel_m', data=y_pixel_m)
         dset = hf.create_dataset('x_depth_field_m', data=x_depth_of_field_m)
         dset = hf.create_dataset('y_depth_field_m', data=y_depth_of_field_m)
+        dset = hf.create_dataset('scan_motors', data=param.scan_motors)
     
     try:
         os.chmod(file_path,0o666)

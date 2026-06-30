@@ -35,6 +35,45 @@ def update_window(w,live_path):
             pass
     QTimer.singleShot(1000, lambda: update_window(w,live_path))
 
+def update_vit_window(w_vit, live_path):
+    vit_pha_file = os.path.join(live_path, 'vit_mosaic_latest.npy')
+    vit_amp_file = os.path.join(live_path, 'vit_mosaic_amp_latest.npy')
+    if (os.path.exists(vit_pha_file) and os.path.getsize(vit_pha_file) > 0 and
+            os.path.exists(vit_amp_file) and os.path.getsize(vit_amp_file) > 0):
+        try:
+            vit_pha = np.load(vit_pha_file)
+            vit_amp = np.load(vit_amp_file)
+
+            # Crop to bounding box of non-NaN pixels
+            finite_mask = np.isfinite(vit_pha)
+            rows = np.any(finite_mask, axis=1)
+            cols = np.any(finite_mask, axis=0)
+            if rows.any() and cols.any():
+                r0, r1 = np.where(rows)[0][[0, -1]]
+                c0, c1 = np.where(cols)[0][[0, -1]]
+                vit_pha = vit_pha[r0:r1+1, c0:c1+1]
+                vit_amp = vit_amp[r0:r1+1, c0:c1+1]
+            vit_pha = np.nan_to_num(vit_pha)
+            vit_amp = np.nan_to_num(vit_amp)
+
+            if np.sum(np.abs(vit_pha))>0 and np.sum(np.abs(vit_amp))>0:
+                pha_images = []
+                amp_images = []
+                pha_images.append(np.rot90(vit_pha))
+                amp_images.append(np.rot90(vit_amp))
+                w_vit.it_ondisplay = -1
+                w_vit.update_images(0, [pha_images, amp_images])
+
+            diff_avg_file = os.path.join(live_path, 'diff_avg_latest.npy')
+            if (hasattr(w_vit, 'canvas_diffraction') and
+                    os.path.exists(diff_avg_file) and os.path.getsize(diff_avg_file) > 0):
+                diff_avg = np.load(diff_avg_file)
+                w_vit.canvas_diffraction.update_image(
+                    np.log1p(diff_avg).astype(np.float32))
+        except:
+            pass
+    QTimer.singleShot(1000, lambda: update_vit_window(w_vit, live_path))
+
 def scale_window(window, scale_factor):
     geometry = window.geometry()
     window.setGeometry(geometry.x(), geometry.y(),
@@ -46,7 +85,7 @@ def scale_window(window, scale_factor):
         widget.setFixedSize(int(widget.width() * scale_factor), int(widget.height() * scale_factor))
         widget.move(int(widget.x() * scale_factor), int(widget.y() * scale_factor))
 
-if __name__ == '__main__':
+def main():
     app = QtWidgets.QApplication(sys.argv)
 
     if len(sys.argv) > 1:
@@ -61,11 +100,22 @@ if __name__ == '__main__':
 
 
     w = ReconStepWindow()
-
+    w.setWindowTitle("Iterative Reconstruction")
     scale_window(w,scale_factor)
     update_window(w,live_path)
     w.show()
 
+    w_vit = ReconStepWindow(prb_num=0)
+    w_vit.setWindowTitle("AI Inference")
+    scale_window(w_vit, scale_factor)
+    w_vit.move(w.geometry().x() + w.geometry().width(), w.geometry().y())
+    update_vit_window(w_vit, live_path)
+    w_vit.show()
+
     w.closeEvent = lambda event: event.accept()
+    w_vit.closeEvent = lambda event: event.accept()
 
     sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()

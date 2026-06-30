@@ -20,7 +20,7 @@ from ._version import __version__
 # databroker related
 from .core.databroker_api import db, load_metadata, save_data, get_single_image, get_detector_names, beamline_name
 
-from .reconStep_gui import ReconStepWindow
+from .reconStep_gui import ReconStepWindow, VitStepWindow
 from .roi_gui import RoiWindow
 from .scan_pt import ScanWindow
 
@@ -106,6 +106,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         self.btn_MPI_file.clicked.connect(self.setMPIfile)
         self.le_gpus.textChanged.connect(self.resetMPIFlg)
+        self.le_gpus.textChanged.connect(self.updateLiveGpuOptions)
+        self.btn_browse_vit_engine.clicked.connect(self.browseVitEngine)
 
         self.connect_sps(self.sp_xray_energy,self.sp_live_energy)
         self.connect_sps(self.sp_detector_distance,self.sp_live_det_distance)
@@ -150,6 +152,9 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             os.makedirs(os.path.dirname(self._config_path))
 
         self.reconStepWindow = None
+        self.vitStepWindow = None
+        self._vit_poll_timer = None
+        self._vit_mosaic_mtime = 0.0
         self.roiWindow = None
         self.scanWindow = None
 
@@ -237,6 +242,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         #    del self._scan_points
         #    self._scan_points = None
         self.close_mmap()
+        if self._vit_poll_timer is not None:
+            self._vit_poll_timer.stop()
 
     
     # TODO: consider merging this function with importConfig()? 
@@ -385,9 +392,19 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         p.batch_width = int(self.sp_batch_width.value())
         p.batch_height = int(self.sp_batch_height.value())
 
+        p.simulate_live_recon = self.ck_simulate_live_recon.isChecked()
         p.live_x_range_max = float(self.sp_live_x_range_max.value())
         p.live_y_range_max = float(self.sp_live_y_range_max.value())
         p.live_num_points_max = int(self.sp_live_num_points_max.value())
+
+        # Live recon GPU assignment
+        _iter_text = self.cb_live_gpu_iterative.currentText()
+        p.live_gpu_iterative = None if _iter_text == "OFF" else int(_iter_text)
+        _ai_text = self.cb_live_gpu_ai.currentText()
+        p.live_gpu_ai = None if _ai_text == "OFF" else int(_ai_text)
+        p.vit_engine_path = self.le_vit_engine_path.text().strip()
+        p.vit_normalization_guess = float(self.sp_vit_norm_guess.value())
+        p.save_vit_batch_files = self.cb_save_vit_batch.isChecked()
 
         p.batch_badpixel_file = self.le_batch_badpixel.text()
 
@@ -542,9 +559,20 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.sp_batch_height.setValue(p.batch_height)
 
         # Live recon
+        self.ck_simulate_live_recon.setChecked(p.simulate_live_recon)
         self.sp_live_x_range_max.setValue(p.live_x_range_max)
         self.sp_live_y_range_max.setValue(p.live_y_range_max)
         self.sp_live_num_points_max.setValue(p.live_num_points_max)
+
+        # Live recon GPU assignment
+        self.updateLiveGpuOptions()  # populate combo boxes from le_gpus
+        idx = self.cb_live_gpu_iterative.findText("OFF" if p.live_gpu_iterative is None else str(p.live_gpu_iterative))
+        self.cb_live_gpu_iterative.setCurrentIndex(max(0, idx))
+        idx = self.cb_live_gpu_ai.findText("OFF" if p.live_gpu_ai is None else str(p.live_gpu_ai))
+        self.cb_live_gpu_ai.setCurrentIndex(max(0, idx))
+        self.le_vit_engine_path.setText(p.vit_engine_path if p.vit_engine_path else '')
+        self.sp_vit_norm_guess.setValue(getattr(p, 'vit_normalization_guess', 1000.0))
+        self.cb_save_vit_batch.setChecked(getattr(p, 'save_vit_batch_files', False))
         
         self.le_batch_badpixel.setText(p.batch_badpixel_file)
 
@@ -554,31 +582,53 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
     def start_live(self):
         try:
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+            self.check_XY_directions()
 
             self.param.live_recon_flag = True
             self.recon_bar.setValue(0)
             self.recon_bar.setMaximum(100)
 
-            # at least one GPU needs to be selected
-            if self.param.gpu_flag and len(self.param.gpus) == 0 and self.param.mpi_file_path == '':
-                print("[WARNING] select at least one GPU!", file=sys.stderr)
+            # Validate GPU selection: at least one live pipeline must be enabled
+            if self.param.live_gpu_iterative is None and self.param.live_gpu_ai is None:
+                print("[WARNING] At least one live GPU must be selected (iterative or AI). Both are OFF.", file=sys.stderr)
                 return
 
+            # Warn if both pipelines target the same GPU
+            if (self.param.live_gpu_iterative is not None and self.param.live_gpu_ai is not None
+                    and self.param.live_gpu_iterative == self.param.live_gpu_ai):
+                print("[WARNING] Iterative and AI pipelines are on the same GPU. "
+                      "CuPy + PyCUDA on the same GPU from different threads can cause CUDA context crashes.",
+                      file=sys.stderr)
 
-            # this is needed because MPI processes need to know the working directory...
-            if self.param.gpu_flag and len(self.param.gpus) == 1 and self.param.gpus[0] == 0:
-                param_live = self.param
+            # Validate AI engine path if AI pipeline is enabled
+            if self.param.live_gpu_ai is not None:
+                if not self.param.vit_engine_path:
+                    print("[WARNING] AI reconstruction is enabled but no engine path is specified.", file=sys.stderr)
+                    return
+                if not os.path.exists(self.param.vit_engine_path):
+                    print(f"[WARNING] AI engine file not found: {self.param.vit_engine_path}", file=sys.stderr)
+                    return
+
+            # Set the primary GPU for the process (iterative takes priority)
+            if self.param.live_gpu_iterative is not None:
+                self.param.gpus = [self.param.live_gpu_iterative]
             else:
-                raise NotImplementedError('Live recon currently only runs on single GPU and only GPU 0.')
-            
+                self.param.gpus = [self.param.live_gpu_ai]
 
-            param_live.x_range = self.sp_live_x_range_max.value()
-            param_live.y_range = self.sp_live_y_range_max.value()
+            param_live = self.param
 
-            param_live.nx = self.sp_batch_width.value()
-            param_live.ny = self.sp_batch_height.value()
-            param_live.nz = self.sp_live_num_points_max.value()
-            param_live.lambda_nm = 1.2398/self.sp_live_energy.value()
+            if not self.ck_simulate_live_recon.isChecked():
+                param_live.x_range = self.sp_live_x_range_max.value()
+                param_live.y_range = self.sp_live_y_range_max.value()
+
+                param_live.nx = self.sp_batch_width.value()
+                param_live.ny = self.sp_batch_height.value()
+                # Only override nz if the user explicitly set a limit (> 0).
+                # When 0, keep param.nz from the loaded H5 file so GPU buffers
+                # are properly sized — mirrors what simulate mode does.
+                if self.sp_live_num_points_max.value() > 0:
+                    param_live.nz = self.sp_live_num_points_max.value()
+                param_live.lambda_nm = 1.2398/self.sp_live_energy.value()
 
 
             save_config(self._config_path,self.param)
@@ -599,6 +649,28 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 if self.reconStepWindow is not None:
                     # TODO: maybe a thorough cleanup???
                     self.reconStepWindow.close()
+
+            # init vitStepWindow for AI inference display
+            if self.param.live_gpu_ai is not None:
+                if self.vitStepWindow is None:
+                    self.vitStepWindow = VitStepWindow()
+                    self.vitStepWindow.move(0, 0)
+                self.vitStepWindow.reset()
+                # Pre-seed mtime with the current file's mtime so the poller
+                # ignores any mosaic written before this run started.
+                _vit_pha_path = os.path.join('/data/users/Holoscan', 'vit_mosaic_latest.npy')
+                self._vit_mosaic_mtime = (os.path.getmtime(_vit_pha_path)
+                                          if os.path.exists(_vit_pha_path) else 0.0)
+                self.vitStepWindow.show()
+                if self._vit_poll_timer is None:
+                    self._vit_poll_timer = QtCore.QTimer(self)
+                    self._vit_poll_timer.timeout.connect(self._poll_vit_window)
+                self._vit_poll_timer.start(1000)
+            else:
+                if self.vitStepWindow is not None:
+                    self.vitStepWindow.close()
+                if self._vit_poll_timer is not None:
+                    self._vit_poll_timer.stop()
 
             if not _TEST:
                 thread = self._ptycho_gpu_thread = PtychoReconLive(self.param, parent=self)
@@ -646,12 +718,79 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             traceback.print_exc()
             
     def stop_live(self):
+        if self._vit_poll_timer is not None:
+            self._vit_poll_timer.stop()
         self.param.live_recon_flag = False
         if self._ptycho_gpu_thread is not None:
             self._ptycho_gpu_thread.kill() # first kill the mpi processes
             self._ptycho_gpu_thread.quit() # then quit QThread gracefully
             self._ptycho_gpu_thread = None
     
+    def _poll_vit_window(self):
+        if self.vitStepWindow is None:
+            return
+        vit_live_dir = '/data/users/Holoscan'
+        vit_pha_file = os.path.join(vit_live_dir, 'vit_mosaic_latest.npy')
+        vit_amp_file = os.path.join(vit_live_dir, 'vit_mosaic_amp_latest.npy')
+        if (os.path.exists(vit_pha_file) and os.path.getsize(vit_pha_file) > 0 and
+                os.path.exists(vit_amp_file) and os.path.getsize(vit_amp_file) > 0):
+            try:
+                mtime = os.path.getmtime(vit_pha_file)
+                if mtime <= self._vit_mosaic_mtime:
+                    return  # file unchanged since last poll, skip
+                self._vit_mosaic_mtime = mtime
+
+                vit_pha = np.rot90(np.load(vit_pha_file))
+                vit_amp = np.rot90(np.load(vit_amp_file))
+
+                # Crop to bounding box of non-NaN pixels so only the scanned
+                # region fills the canvas (shared mask — both mosaics are aligned)
+                finite_mask = np.isfinite(vit_pha)
+                rows = np.any(finite_mask, axis=1)
+                cols = np.any(finite_mask, axis=0)
+                if rows.any() and cols.any():
+                    r0, r1 = np.where(rows)[0][[0, -1]]
+                    c0, c1 = np.where(cols)[0][[0, -1]]
+                    vit_pha = vit_pha[r0:r1+1, c0:c1+1]
+                    vit_amp = vit_amp[r0:r1+1, c0:c1+1]
+
+                # Clim from 1st/99th percentile of the central 50%
+                # crop (H/4:3H/4, W/4:3W/4) to avoid edge artefacts biasing scale
+                H, W = vit_pha.shape
+                h0, h1 = H // 4, 3 * H // 4
+                w0, w1 = W // 4, 3 * W // 4
+                crop_pha = vit_pha[h0:h1, w0:w1]
+                crop_amp = vit_amp[h0:h1, w0:w1]
+                valid_pha = crop_pha[np.isfinite(crop_pha)]
+                valid_amp = crop_amp[np.isfinite(crop_amp)]
+                if valid_pha.size > 0:
+                    clim_pha = (float(np.percentile(valid_pha, 1)),
+                                float(np.percentile(valid_pha, 99)))
+                    self.vitStepWindow.canvas_object_pha.update_image(vit_pha, clim_pha)
+                if valid_amp.size > 0:
+                    clim_amp = (float(np.percentile(valid_amp, 1)),
+                                float(np.percentile(valid_amp, 99)))
+                    self.vitStepWindow.canvas_object_amp.update_image(vit_amp, clim_amp)
+
+                diff_avg_file = os.path.join(vit_live_dir, 'diff_avg_latest.npy')
+                if (hasattr(self.vitStepWindow, 'canvas_diffraction') and
+                        os.path.exists(diff_avg_file) and os.path.getsize(diff_avg_file) > 0):
+                    diff_avg = np.load(diff_avg_file)
+                    self.vitStepWindow.canvas_diffraction.update_image(
+                        np.log1p(diff_avg).astype(np.float32))
+
+                # Update progress bar
+                progress_file = os.path.join(vit_live_dir, 'vit_progress.npy')
+                if (hasattr(self.vitStepWindow, 'progressBar') and
+                        os.path.exists(progress_file) and os.path.getsize(progress_file) > 0):
+                    progress = np.load(progress_file)
+                    done, total = int(progress[0]), int(progress[1])
+                    if total > 0:
+                        self.vitStepWindow.progressBar.setValue(
+                            min(100, int(100 * done / total)))
+            except:
+                pass
+
     def send_to_slurm_queue(self):
         self.param.live_recon_flag = False
         working_directory = str(self.le_working_directory.text())
@@ -664,6 +803,10 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
         snd = PtychoReconSlurmQueue(self.param,int(self.sp_slurm_n_parallel.value()))
         snd.send()
+
+    def check_XY_directions(self):
+        if self.param.x_direction != -1 or self.param.y_direction != -1:
+            print(f"################### WARNING ###################\n Coefficient for x direction is set to {self.param.x_direction} and y direction is set to x direction is set to {self.param.y_direction}, make sure these values are correct.")
 
     def start(self, batch_mode=False):
         if self._ptycho_gpu_thread is not None and self._ptycho_gpu_thread.isFinished():
@@ -693,6 +836,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         return
 
             self.update_param_from_gui() # this has to be done first, so all operations depending on param are correct
+            self.check_XY_directions()
             self.recon_bar.setValue(0)
             self.recon_bar.setMaximum(self.param.n_iterations)
 
@@ -874,11 +1018,15 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                 pass # nothing to clean up, we're done
 
 
-    def update_recon_step(self, it, data=None):
+    def update_recon_step(self, it, data=None,data2=None):
         try:
-            if data == 'flush':
+            if isinstance(data,str) and data.startswith('flush'):
                 self.reconStepWindow.image_buffer = {}
                 self.reconStepWindow.current_max_iters = 1
+                try:
+                    self.sp_scan_num.setValue(int(data.split()[1]))
+                except:
+                    pass
                 self.recon_bar.setValue(0)
                 self.reset_at_next = True
                 return
@@ -1287,6 +1435,48 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         # called when any gpu button is clicked
         self.param.mpi_file_path = ''
         self.le_MPI_file_path.setText('')
+
+    def updateLiveGpuOptions(self):
+        """Update live recon GPU combo boxes based on the GPUs entered in le_gpus."""
+        try:
+            gpu_list = parse_range2(self.le_gpus.text(), batch_processing=False)
+        except Exception:
+            gpu_list = []
+
+        # Preserve current selections
+        prev_iter = self.cb_live_gpu_iterative.currentText()
+        prev_ai = self.cb_live_gpu_ai.currentText()
+
+        # Rebuild combo box items
+        self.cb_live_gpu_iterative.blockSignals(True)
+        self.cb_live_gpu_ai.blockSignals(True)
+
+        self.cb_live_gpu_iterative.clear()
+        self.cb_live_gpu_iterative.addItem("OFF")
+        self.cb_live_gpu_ai.clear()
+        self.cb_live_gpu_ai.addItem("OFF")
+
+        for gpu_id in gpu_list:
+            self.cb_live_gpu_iterative.addItem(str(gpu_id))
+            self.cb_live_gpu_ai.addItem(str(gpu_id))
+
+        # Restore previous selection if still valid
+        idx_iter = self.cb_live_gpu_iterative.findText(prev_iter)
+        self.cb_live_gpu_iterative.setCurrentIndex(idx_iter if idx_iter >= 0 else 0)
+        idx_ai = self.cb_live_gpu_ai.findText(prev_ai)
+        self.cb_live_gpu_ai.setCurrentIndex(idx_ai if idx_ai >= 0 else 0)
+
+        self.cb_live_gpu_iterative.blockSignals(False)
+        self.cb_live_gpu_ai.blockSignals(False)
+
+    def browseVitEngine(self):
+        """Open file dialog to select a TensorRT .engine file."""
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Select TensorRT engine file", "",
+            "Engine files (*.engine);;ONNX files (*.onnx);;All files (*)"
+        )
+        if filepath:
+            self.le_vit_engine_path.setText(filepath)
 
     def batchSlurmClear(self):
         ans = QtWidgets.QMessageBox.question(self, "Warning", f"Will remove all slurm jobs in the queue.\nAre you sure?")
@@ -1779,7 +1969,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         self.btn_view_frame.setEnabled(False)
 
         try:
-            print("loading from databroker...", end='')
+            print("loading from databroker...")
             QtWidgets.QApplication.processEvents()
             metadata = load_metadata(self.db,scan_id,det_name)
             self._setExpParamBroker(metadata)
@@ -1817,6 +2007,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
         #if 'z_m' in metadata:
         #    print("[WARNING] Retrieved and updated the detector distance (from a hard-coded source).", file=sys.stderr)
         #    self.sp_detector_distance.setValue(metadata['z_m'])
+        self.le_x_motor_name.setText(metadata.get('x_motor_name', ''))
+        self.le_y_motor_name.setText(metadata.get('y_motor_name', ''))
         self.sp_x_arr_size.setValue(metadata['nx'])
         self.sp_y_arr_size.setValue(metadata['ny'])
         self.sp_num_points.setValue(metadata['nz'])
@@ -1900,6 +2092,12 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self.sp_ccd_pixel_um.setValue(f['ccd_pixel_um'][()])
             if 'angle' in f.keys():
                 self.sp_angle.setValue(f['angle'][()])
+            if 'x_motor_name' in f.keys():
+                self.le_x_motor_name.setText(str(f['x_motor_name'][()].decode()))
+                self.param.x_motor_name = str(f['x_motor_name'][()].decode())
+            if 'y_motor_name' in f.keys():
+                self.le_y_motor_name.setText(str(f['y_motor_name'][()].decode()))
+                self.param.y_motor_name = str(f['y_motor_name'][()].decode())
             else:
                 # self.sp_angle.setValue(15.) # backward compatibility for old datasets
                 # print("[WARNING] angle not found, assuming 15...", file=sys.stderr)
@@ -1987,6 +2185,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
             self.stop()
             if self.reconStepWindow is not None:
                 self.reconStepWindow.close()
+            if self.vitStepWindow is not None:
+                self.vitStepWindow.close()
             if self.roiWindow is not None:
                 self.roiWindow.close()
             if self.scanWindow is not None:
@@ -2015,6 +2215,7 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
     @QtCore.pyqtSlot(str, QtGui.QColor)
     def on_stdout_message(self, message, color):
+        self.console_info.document().setMaximumBlockCount(10000)
         self.console_info.moveCursor(QtGui.QTextCursor.End)
         self.console_info.setTextColor(color)
         self.console_info.insertPlainText(message)

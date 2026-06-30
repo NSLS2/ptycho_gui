@@ -44,11 +44,14 @@ class Param(object):
         self.nx = 0               # x_arr_size
         self.dr_x = 0.            # x_step_size
         self.x_range = 0.
+        self.x_motor_name = ''    # x motor name
         self.ny = 0               # y_arr_size
         self.dr_y = 0.            # y_step_size
         self.y_range = 0.
+        self.y_motor_name = ''    # y motor name
         self.scan_type = 'mesh'   # ['mesh', 'spiral', 'fly']
         self.nz = 0               # number of scan points
+        self.scan_motors = []      # original scan motor names 
 
         ### [Reconstruction parameters] ###
         self.n_iterations = 50       # number of iterations
@@ -89,6 +92,13 @@ class Param(object):
         self.use_NCCL = False
         self.use_CUDA_MPI = False
         self.mpi_file_path = ''   # full path to a valid MPI machine file
+
+        ### [Live recon GPU assignment] ###
+        self.live_gpu_iterative = None  # None means OFF, integer means GPU index
+        self.live_gpu_ai = None         # None means OFF, integer means GPU index
+        self.vit_engine_path = ''       # path to TensorRT .engine file for AI inference
+        self.vit_normalization_guess = 1000.0  # fallback ViT normalization before auto-compute
+        self.save_vit_batch_files = False        # save per-batch vit_batch_*.npy files
 
         ### [adv param group] ###
         self.ccd_pixel_um = 55.      # detector pixel size (um)

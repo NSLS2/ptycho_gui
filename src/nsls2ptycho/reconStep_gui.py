@@ -1,5 +1,5 @@
 import sys
-from PyQt5 import QtWidgets
+from PyQt5 import QtCore, QtWidgets
 from .ui import ui_reconstep
 from .core.ptycho import utils
 
@@ -41,6 +41,8 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
         self.canvas_object_chi.axis_on()
         self.canvas_probe_chi.reset()
         self.canvas_probe_chi.axis_on()
+        self.metric_buffer_it = []
+        self.metric_buffer = []
 
     def reset_window(self, obj_num=1, prb_num=1, result_type_num=1, iterations=50, slider_interval=1):
         """Called from outside"""
@@ -103,10 +105,12 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             images_to_show = self.image_buffer[it]
             object_image = self._fetch_images(it, images_to_show, 'obj_amp')
             if object_image is not None:
-                self.canvas_object_amp.update_image(object_image)
+                clim = self._compute_percentile_clim(object_image)
+                self.canvas_object_amp.update_image(object_image, clim)
             object_image = self._fetch_images(it, images_to_show, 'obj_pha')
             if object_image is not None:
-                self.canvas_object_pha.update_image(object_image)
+                clim = self._compute_percentile_clim(object_image)
+                self.canvas_object_pha.update_image(object_image, clim)
 
     def cb_image_probe_op(self, idx):
         it = self.sb_iter.value()
@@ -116,10 +120,12 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             images_to_show = self.image_buffer[it]
             probe_image_amp = self._fetch_images(it, images_to_show, 'prb_amp')
             if probe_image_amp is not None:
-                self.canvas_probe_amp.update_image(probe_image_amp)
+                clim = self._compute_percentile_clim(probe_image_amp)
+                self.canvas_probe_amp.update_image(probe_image_amp, clim)
             probe_image_pha = self._fetch_images(it, images_to_show, 'prb_pha')
             if probe_image_pha is not None:
-                self.canvas_probe_pha.update_image(probe_image_pha)
+                clim = self._compute_percentile_clim(probe_image_pha)
+                self.canvas_probe_pha.update_image(probe_image_pha, clim)
             if probe_image_amp is not None and probe_image_pha is not None:
                 probe_image_comp = utils.imRGB_from_comp(probe_image_amp,probe_image_pha)
                 self.canvas_probe_comp.update_image(probe_image_comp)
@@ -165,6 +171,25 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             self.slider_iters.setValue(it)
             self.sb_iter.setValue(it)
 
+    def _compute_percentile_clim(self, image):
+        """Compute clim from 1st/99th percentile of central 50% of image.
+        Returns (vmin, vmax) tuple, or None if image is invalid."""
+        if image is None or image.size == 0:
+            return None
+        
+        H, W = image.shape
+        h0, h1 = H // 8, 7 * H // 8
+        w0, w1 = W // 4, 3 * W // 4
+        
+        crop = image[h0:h1, w0:w1]
+        # Extract valid (finite, non-NaN) pixels
+        valid = crop[np.isfinite(crop)]
+        
+        if valid.size == 0:
+            return None
+        
+        return (float(np.percentile(valid, 1)), float(np.percentile(valid, 99)))
+
     def update_images(self, it, images=None):
         try:
             if images is not None:
@@ -189,16 +214,20 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                 object_image_amp = self._fetch_images(it, images_to_show, 'obj_amp')
                 probe_image_amp = self._fetch_images(it, images_to_show, 'prb_amp')
                 if object_image_amp is not None:
-                    self.canvas_object_amp.update_image(object_image_amp) #,[0.75,1])
+                    clim = self._compute_percentile_clim(object_image_amp)
+                    self.canvas_object_amp.update_image(object_image_amp, clim)
                 if probe_image_amp is not None:
-                    self.canvas_probe_amp.update_image(probe_image_amp)
+                    clim = self._compute_percentile_clim(probe_image_amp)
+                    self.canvas_probe_amp.update_image(probe_image_amp, clim)
 
                 object_image_pha = self._fetch_images(it, images_to_show, 'obj_pha')
                 probe_image_pha = self._fetch_images(it, images_to_show, 'prb_pha')
                 if object_image_pha is not None:
-                    self.canvas_object_pha.update_image(object_image_pha) #,[-0.1,0.2])
+                    clim = self._compute_percentile_clim(object_image_pha)
+                    self.canvas_object_pha.update_image(object_image_pha, clim)
                 if probe_image_pha is not None:
-                    self.canvas_probe_pha.update_image(probe_image_pha)
+                    clim = self._compute_percentile_clim(probe_image_pha)
+                    self.canvas_probe_pha.update_image(probe_image_pha, clim)
 
                 #if object_image_amp is not None and object_image_pha is not None:
                 #    object_image_comp = utils.imRGB_from_comp(object_image_amp,object_image_pha,(0.95,0.05))
@@ -266,6 +295,77 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             for item in self.image_buffer[key]:
                 print("{} ".format(hex(id(item))), end='', file=sys.stderr)
             print("", file=sys.stderr)
+
+
+class VitStepWindow(QtWidgets.QMainWindow):
+    """Minimal two-panel window for AI inference live display (Phase + Amplitude).
+    Exposes canvas_object_pha and canvas_object_amp with the same API as
+    ReconStepWindow so _poll_vit_window() works without modification."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("AI Inference")
+        self.resize(1620, 570)
+
+        from .core.widgets.mplcanvas import MplCanvas
+
+        central = QtWidgets.QWidget(self)
+        self.setCentralWidget(central)
+
+        root = QtWidgets.QVBoxLayout(central)
+        root.setContentsMargins(2, 2, 2, 2)
+        root.setSpacing(2)
+
+        # --- two canvas columns ---
+        canvas_row = QtWidgets.QHBoxLayout()
+        canvas_row.setSpacing(2)
+
+        def _make_panel(label_text):
+            col = QtWidgets.QVBoxLayout()
+            col.setSpacing(1)
+            col.setContentsMargins(0, 0, 0, 0)
+            lbl = QtWidgets.QLabel(label_text)
+            font = lbl.font()
+            font.setBold(True)
+            lbl.setFont(font)
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+            lbl.setMaximumHeight(16)
+            canvas = MplCanvas(central, width=8, height=6, dpi=100)
+            canvas.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding,
+                QtWidgets.QSizePolicy.Expanding)
+            col.addWidget(lbl)
+            col.addWidget(canvas)
+            canvas_row.addLayout(col)
+            return canvas
+
+        self.canvas_object_pha = _make_panel("Phase")
+        self.canvas_object_amp = _make_panel("Amplitude")
+        self.canvas_diffraction = _make_panel("Averaged Diffraction Pattern (90-deg CW rotated)")
+
+        root.addLayout(canvas_row, stretch=1)
+
+        # --- bottom bar: progress + close ---
+        bottom = QtWidgets.QHBoxLayout()
+        bottom.setContentsMargins(0, 0, 0, 0)
+        self.progressBar = QtWidgets.QProgressBar()
+        self.progressBar.setMaximumHeight(14)
+        self.progressBar.setValue(0)
+        btn_close = QtWidgets.QPushButton("Close")
+        btn_close.setFixedWidth(60)
+        btn_close.setMaximumHeight(18)
+        btn_close.clicked.connect(self.close)
+        bottom.addWidget(self.progressBar, stretch=1)
+        bottom.addWidget(btn_close)
+
+        root.addLayout(bottom)
+
+    def reset(self):
+        """Clear both canvases and reset progress bar (call on each new run)."""
+        self.canvas_object_pha.reset()
+        self.canvas_object_amp.reset()
+        self.canvas_diffraction.reset()
+        self.progressBar.setValue(0)
 
 
 if __name__ == '__main__':

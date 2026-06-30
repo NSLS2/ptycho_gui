@@ -314,15 +314,13 @@ class recon_worker_slurm:
                 #SBATCH --job-name=ptycho
                 #SBATCH --qos=normal
                 #SBATCH --time=0-03:00:00
-
                 #SBATCH --ntasks-per-node={nthreads}
                 #SBATCH --gres=gpu:{nthreads}
-
+                #SBATCH --mem=128G
                 #SBATCH --partition=normal
                 #SBATCH --error={self.base_dir + "/.ptycho_slurm.err"}
                 #SBATCH --output={self.base_dir + "/.ptycho_slurm.out"}
-                source load-hxn
-                python -W ignore -m {parent_module}.remote_worker {self.remote_config_path} 5  {uuid} # <monitor_path> <timeout> <uuid>
+                {sys.executable} -W ignore -m {parent_module}.remote_worker {self.remote_config_path} 5  {uuid} # <monitor_path> <timeout> <uuid>
             ''').strip()
 
         with open(sbatch_script_path,'w') as f:
