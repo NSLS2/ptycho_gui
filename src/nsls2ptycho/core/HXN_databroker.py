@@ -199,6 +199,34 @@ def assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry):
     return x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y
 
 
+def _warn_scan_axis_discrepancy(scan_num, branch_name, func_values, legacy_values, rtol=1e-6, atol=1e-9):
+    exact_fields = ['x_motor_name', 'y_motor_name', 'x_num', 'y_num']
+    float_fields = ['x_range', 'y_range', 'dr_x', 'dr_y']
+
+    mismatches = []
+
+    for key in exact_fields:
+        if func_values[key] != legacy_values[key]:
+            mismatches.append(
+                f"{key}: function={func_values[key]!r}, legacy={legacy_values[key]!r}"
+            )
+
+    for key in float_fields:
+        fval = func_values[key]
+        lval = legacy_values[key]
+        if not (np.isfinite(fval) and np.isfinite(lval) and np.isclose(fval, lval, rtol=rtol, atol=atol)):
+            mismatches.append(
+                f"{key}: function={fval!r}, legacy={lval!r}"
+            )
+
+    if mismatches:
+        warnings.warn(
+            f"Scan {scan_num} ({branch_name}): assign_motors_to_scan_axis disagrees with legacy scan-axis values. "
+            + "; ".join(mismatches),
+            RuntimeWarning,
+        )
+
+
 def load_metadata(db, scan_num:int, det_name:str):
     '''
     Get all metadata for the given scan number and detector name
@@ -344,9 +372,11 @@ def load_metadata(db, scan_num:int, det_name:str):
             dcm_th = bl.dcm_th[1]
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
             # get the scan range
-            x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='scan')
-            print("x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
-                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
+            func_x_motor_name, func_x_range, func_x_num, func_dr_x, func_y_motor_name, func_y_range, func_y_num, func_dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='scan')
+            x_motor_name = func_x_motor_name
+            y_motor_name = func_y_motor_name
+            print("x_motor_name: ", func_x_motor_name, ", x_range: ", func_x_range, ", x_num: ", func_x_num, ", dr_x: ", func_dr_x,\
+                ", y_motor_name: ", func_y_motor_name, ", y_range: ", func_y_range, ", y_num: ", func_y_num, ", dr_y: ", func_dr_y)
 
             if scan_doc['type'].startswith('FIP'):
                 x_range = np.abs(scan_doc['scan_input'][1])
@@ -369,8 +399,30 @@ def load_metadata(db, scan_num:int, det_name:str):
             dr_y = 1.*y_range/y_num
             x_range = x_range
             y_range = y_range
-            print("For reference: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
-                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
+            _warn_scan_axis_discrepancy(
+                scan_num=sid,
+                branch_name='panda_scan',
+                func_values={
+                    'x_motor_name': func_x_motor_name,
+                    'x_range': func_x_range,
+                    'x_num': func_x_num,
+                    'dr_x': func_dr_x,
+                    'y_motor_name': func_y_motor_name,
+                    'y_range': func_y_range,
+                    'y_num': func_y_num,
+                    'dr_y': func_dr_y,
+                },
+                legacy_values={
+                    'x_motor_name': x_motor_name,
+                    'x_range': x_range,
+                    'x_num': x_num,
+                    'dr_x': dr_x,
+                    'y_motor_name': y_motor_name,
+                    'y_range': y_range,
+                    'y_num': y_num,
+                    'dr_y': dr_y,
+                },
+            )
 
             # get points
             scan_dim = scan_doc['shape']
@@ -463,9 +515,11 @@ def load_metadata(db, scan_num:int, det_name:str):
             energy_kev = 12.39842 / (2.*3.1355893 * np.sin(dcm_th * np.pi / 180.))
 
             # get the scan range
-            x_motor_name,x_range, x_num, dr_x, y_motor_name, y_range, y_num, dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='')
-            print("x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
-                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
+            func_x_motor_name, func_x_range, func_x_num, func_dr_x, func_y_motor_name, func_y_range, func_y_num, func_dr_y = assign_motors_to_scan_axis(scan_motors, scan_doc, start_entry='')
+            x_motor_name = func_x_motor_name
+            y_motor_name = func_y_motor_name
+            print("x_motor_name: ", func_x_motor_name, ", x_range: ", func_x_range, ", x_num: ", func_x_num, ", dr_x: ", func_dr_x,\
+                ", y_motor_name: ", func_y_motor_name, ", y_range: ", func_y_range, ", y_num: ", func_y_num, ", dr_y: ", func_dr_y)
             if scan_motors[0].endswith('ssy'):
                 y_range = np.abs(scan_doc['scan_input'][1] - scan_doc['scan_input'][0])
                 x_range = np.abs(scan_doc['scan_input'][4] - scan_doc['scan_input'][3])
@@ -481,8 +535,30 @@ def load_metadata(db, scan_num:int, det_name:str):
             dr_y = 1.*y_range/y_num
             x_range = x_range
             y_range = y_range
-            print("For reference: x_motor_name: ", x_motor_name, ", x_range: ", x_range, ", x_num: ", x_num, ", dr_x: ", dr_x,\
-                  ", y_motor_name: ", y_motor_name, ", y_range: ", y_range, ", y_num: ", y_num, ", dr_y: ", dr_y)
+            _warn_scan_axis_discrepancy(
+                scan_num=sid,
+                branch_name='non_panda_scan',
+                func_values={
+                    'x_motor_name': func_x_motor_name,
+                    'x_range': func_x_range,
+                    'x_num': func_x_num,
+                    'dr_x': func_dr_x,
+                    'y_motor_name': func_y_motor_name,
+                    'y_range': func_y_range,
+                    'y_num': func_y_num,
+                    'dr_y': func_dr_y,
+                },
+                legacy_values={
+                    'x_motor_name': x_motor_name,
+                    'x_range': x_range,
+                    'x_num': x_num,
+                    'dr_x': dr_x,
+                    'y_motor_name': y_motor_name,
+                    'y_range': y_range,
+                    'y_num': y_num,
+                    'dr_y': dr_y,
+                },
+            )
 
             # get points
             scan_dim = scan_doc['shape']

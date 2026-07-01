@@ -106,12 +106,12 @@ class recon_worker:
             self.process.terminate()
             self.process.wait()
             self.process = None
-        self.msg_export('[Worker]Recon aborted')
+        self.msg_export('[Worker] Recon aborted')
         self.cleanup()
 
     def complete_recon(self):
         if self.fname_full:
-            self.msg_export('[Worker]Recon done for '+self.fname)
+            self.msg_export('[Worker] Recon done for '+self.fname)
             self.cleanup()
             # Remove msg file
             if os.path.isfile(os.path.join(self.monitor_path,'msg'+self.p.uuid)):
@@ -125,7 +125,7 @@ class recon_worker:
 
         self.uuid = self.p.uuid
         self.msg_file = os.path.join(os.path.join(self.monitor_path,'msg'+self.uuid))
-        self.msg_export('[Worker]Start reconstructing '+self.fname)
+        self.msg_export('[Worker] Start reconstructing '+self.fname)
 
         nthreads = len(self.p.gpus) if self.p.gpu_flag else 1
 
@@ -224,7 +224,7 @@ class recon_worker:
             else:
                 flist = [f for f in os.listdir(self.monitor_path) if f.startswith('ptycho') and f.endswith(self.uuid_search)]
                 if not flist:
-                    print(f'\r[Worker]Recon folder is empty, waiting for task{"." * self.dot_count}   ',end='')
+                    print(f'\r[Worker] Recon folder is empty, waiting for task{"." * self.dot_count}   ',end='')
                     self.dot_count = (self.dot_count)%3 + 1
                     time.sleep(0.5)
                 for fname in flist:
