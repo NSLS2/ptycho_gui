@@ -85,7 +85,7 @@ run-ptycho-development = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSE
 run-ptycho-development-worker = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE=1 python ./pixi_wrapper/run-ptycho-worker.py"}
 
 [feature.holoscan]
-system-requirements = {libc = { family = "glibc", version = "2.35" }}
+#system-requirements = {libc = { family = "glibc", version = "2.35" }}
 
 [feature.holoscan.pypi-dependencies]
 #nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
