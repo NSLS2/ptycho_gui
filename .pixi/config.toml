@@ -1,2 +1,17 @@
-[detached-environments]
-enabled = true
+#[detached-environments]
+#enabled = true
+
+#[cache]
+# 1. Direct everyone to download packages to the same shared disk area
+#dir = "/nsls2/data2/hxn/legacy/users/data_analysis/Ptychography/pixi-cache"
+
+# 2. Pin detached environments to automatically isolate based on username
+# Passing the $USER or %USERNAME% environment variables directly inside the configuration string 
+# ensures Pixi expands it uniquely for whoever runs the command.
+#detached-environments = "/tmp/pixi/envs/$USER"
+[cache]
+# Shared NFS: large conda packages (safe for concurrent reads/writes)
+conda-packages = "/nsls2/data2/hxn/legacy/users/data_analysis/Ptychography/pixi-cache/pkgs"
+repodata       = "/nsls2/data2/hxn/legacy/users/data_analysis/Ptychography/pixi-cache/repodata"
+
+
