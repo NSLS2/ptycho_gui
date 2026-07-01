@@ -11,13 +11,13 @@ channels = ["conda-forge"]
 description = "pixi environment for NSLS-II ptycho_gui without holoscan by TS"
 name = "NSLS-II Ptycho GUI"
 platforms = ["linux-64"]
-version = "2.3.2+pixi"
+version = "2.3.5+pixi"
 
 [environments]
 default = {features = ["HXN_production"], solve-group = "production"}
 production = {features = ["HXN_production"], solve-group = "production"}
 development = {features = ["HXN_development"], solve-group = "development"}
-holoscan = {features = ["HXN_development", "holoscan"], solve-group = "holoscan"}
+holoscan = {features = ["holoscan"], solve-group = "holoscan"}
 
 
 
@@ -89,12 +89,16 @@ system-requirements = {libc = { family = "glibc", version = "2.35" }}
 
 [feature.holoscan.pypi-dependencies]
 #nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_development", editable=true}
-pyzmq = ">=26.0"
-holoscan = "==3.1.*"
-dectris-compression = ">=0.3"
+#nsls2ptycho = { path = "./ptycho_gui", editable=true}
+#pyzmq = ">=26.0"
+#holoscan = "==3.1.*"
+#dectris-compression = ">=0.3"
 #posix_ipc = "==1.1.1"
 
 [feature.holoscan.tasks]
 # Build the container image (if missing) and launch the ptycho GUI inside it.
-# Usage: pixi run -e holoscan launch
-launch = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/HoloScanContainerAIInference/holoscan-framework/launch_holoscan_gui.sh" }
+# Usage: pixi run -e holoscan run-ptycho-development
+run-ptycho-development = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/launch_holoscan_gui.sh" }
+build-container = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/build_container" }
+build-engine = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/build_engine_interactive.sh" }
+run-container = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/run_container" }
