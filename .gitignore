@@ -15,5 +15,13 @@ dist/
 *.egg-info/
 
 # Pixi
-.pixi/
 pixi.lock
+# 1. Ignore all contents inside the specific folder
+.pixi/*
+
+# 2. Re-include the folder itself (required so Git scans it)
+!.pixi/
+
+# 3. Re-include the specific file you want to keep
+!.pixi/config.toml
+
