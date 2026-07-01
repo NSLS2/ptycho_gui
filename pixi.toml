@@ -98,7 +98,7 @@ run-ptycho-development-worker = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTH
 [feature.holoscan.tasks]
 # Build the container image (if missing) and launch the ptycho GUI inside it.
 # Usage: pixi run -e holoscan run-ptycho-development
-run-ptycho-development = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/launch_holoscan_gui.sh" }
-build-container = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/build_container" }
-build-engine = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/build_engine_interactive.sh" }
-run-container = { cmd = "bash /nsls2/data2/hxn/legacy/home/home/tshimamur/02Pixi/ptycho_gui/holoscan-framework/podman_dir/run_container" }
+run-ptycho-development = { cmd = "bash ./holoscan-framework/podman_dir/launch_holoscan_gui.sh" }
+build-container = { cmd = "bash ./holoscan-framework/podman_dir/build_container" }
+build-engine = { cmd = "bash ./holoscan-framework/podman_dir/build_engine_interactive.sh" }
+run-container = { cmd = "bash ./holoscan-framework/podman_dir/run_container" }
