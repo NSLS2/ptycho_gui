@@ -245,11 +245,16 @@ def load_metadata(db, scan_num:int, det_name:str):
     sid = scan_num
     header = db[sid]
     warnings.filterwarnings("ignore", category = pandas.errors.PerformanceWarning)
+    x_motor_name = ''
+    y_motor_name = ''
     
     if 'plan_args' in header.start:
         plan_args = header.start['plan_args']
         scan_type = header.start['plan_name']
         scan_motors = header.start['motors']
+        if len(scan_motors) >= 2:
+            x_motor_name = scan_motors[0]
+            y_motor_name = scan_motors[1]
         items = [det_name, 'sclr1_ch3', 'sclr1_ch4'] + scan_motors
         bl = db.get_table(header, stream_name='baseline')
         df = db.get_table(header, fields=items, fill=False)
