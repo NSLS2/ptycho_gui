@@ -10,7 +10,7 @@ authors = [
 channels = ["conda-forge"]
 description = "pixi environment for NSLS-II ptycho_gui without holoscan by TS"
 name = "NSLS-II Ptycho GUI"
-platforms = ["linux-64"]
+platforms = [{ name = "linux-64-glibc228", platform = "linux-64", glibc = "2.28" }]
 version = "2.3.5+pixi"
 
 [environments]
@@ -66,14 +66,14 @@ run-ptycho-worker = {cmd = "env -u PYTHONPATH -u PYTHONUSERBASE PYTHONNOUSERSITE
 
 
 [feature.HXN_production]
-system-requirements = {libc = { family = "glibc", version = "2.28" }}
+platforms = ["linux-64-glibc228"]
 
 [feature.HXN_production.pypi-dependencies]
 nsls2ptycho = { git = "ssh://git@github.com/nsls2/ptycho_gui.git", branch="HXN_production"}
 #posix_ipc = "==1.1.1"
 
 [feature.HXN_development]
-system-requirements = {libc = { family = "glibc", version = "2.28" }}
+platforms = ["linux-64-glibc228"]
 
 [feature.HXN_development.pypi-dependencies]
 nsls2ptycho = { path = ".", editable=true}
