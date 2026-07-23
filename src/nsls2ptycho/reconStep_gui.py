@@ -65,6 +65,22 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
         self.canvas_probe_chi.axis_on()
         self.reset_image_menu(obj_num, prb_num, result_type_num)
 
+    def freeze_image_buffer(self):
+        """Detach buffered images from mmap-backed arrays for post-run browsing."""
+        for it_key, images in list(self.image_buffer.items()):
+            self.image_buffer[it_key] = [np.array(img, copy=True) for img in images]
+
+    def _get_buffered_iteration(self, it):
+        """Return best buffered iteration for requested slider value."""
+        if it in self.image_buffer:
+            return it
+        if not self.image_buffer:
+            return None
+        lower_or_equal = [k for k in self.image_buffer if k <= it]
+        if lower_or_equal:
+            return max(lower_or_equal)
+        return min(self.image_buffer)
+
     def reset_image_menu(self, obj_num, prb_num, result_type_num):
         # number of object and probe images
         self.obj_num = obj_num
@@ -100,8 +116,8 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
         self.update_images(it)
 
     def cb_image_object_op(self, idx):
-        it = self.sb_iter.value()
-        if it in self.image_buffer:
+        it = self._get_buffered_iteration(self.sb_iter.value())
+        if it is not None:
             images_to_show = self.image_buffer[it]
             object_image = self._fetch_images(it, images_to_show, 'obj_amp')
             if object_image is not None:
@@ -113,10 +129,8 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                 self.canvas_object_pha.update_image(object_image, clim)
 
     def cb_image_probe_op(self, idx):
-        it = self.sb_iter.value()
-        if it not in self.image_buffer:
-            it = len(self.image_buffer)-1
-        if it in self.image_buffer:
+        it = self._get_buffered_iteration(self.sb_iter.value())
+        if it is not None:
             images_to_show = self.image_buffer[it]
             probe_image_amp = self._fetch_images(it, images_to_show, 'prb_amp')
             if probe_image_amp is not None:
@@ -196,11 +210,14 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                 # just hold the mmap reference, don't do expansive copy
                 self.image_buffer[it] = images
 
+            display_it = it
             images_to_show = None
             if self.is_live_update() and images is not None:
                 images_to_show = images
-            elif it in self.image_buffer:
-                images_to_show = self.image_buffer[it]
+            else:
+                display_it = self._get_buffered_iteration(it)
+                if display_it is not None:
+                    images_to_show = self.image_buffer[display_it]
 
             object_image_amp = None
             probe_image_amp = None
@@ -210,9 +227,9 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
             if not hasattr(self,'it_ondisplay'):
                 self.it_ondisplay = -1
 
-            if images_to_show is not None and it != self.it_ondisplay:
-                object_image_amp = self._fetch_images(it, images_to_show, 'obj_amp')
-                probe_image_amp = self._fetch_images(it, images_to_show, 'prb_amp')
+            if images_to_show is not None and display_it != self.it_ondisplay:
+                object_image_amp = self._fetch_images(display_it, images_to_show, 'obj_amp')
+                probe_image_amp = self._fetch_images(display_it, images_to_show, 'prb_amp')
                 if object_image_amp is not None:
                     clim = self._compute_percentile_clim(object_image_amp)
                     self.canvas_object_amp.update_image(object_image_amp, clim)
@@ -220,8 +237,8 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                     clim = self._compute_percentile_clim(probe_image_amp)
                     self.canvas_probe_amp.update_image(probe_image_amp, clim)
 
-                object_image_pha = self._fetch_images(it, images_to_show, 'obj_pha')
-                probe_image_pha = self._fetch_images(it, images_to_show, 'prb_pha')
+                object_image_pha = self._fetch_images(display_it, images_to_show, 'obj_pha')
+                probe_image_pha = self._fetch_images(display_it, images_to_show, 'prb_pha')
                 if object_image_pha is not None:
                     clim = self._compute_percentile_clim(object_image_pha)
                     self.canvas_object_pha.update_image(object_image_pha, clim)
@@ -241,7 +258,7 @@ class ReconStepWindow(QtWidgets.QMainWindow, ui_reconstep.Ui_MainWindow):
                     probe_fft = np.abs(np.fft.fftshift(np.fft.fft2(probe_comp)))
                     self.canvas_probe_fft.update_image(probe_fft)
                 
-                self.it_ondisplay = it
+                self.it_ondisplay = display_it
         except:
             traceback.print_exc()
             pass

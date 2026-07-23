@@ -995,6 +995,11 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
 
 
     def close_mmap(self):
+        if self.reconStepWindow is not None:
+            try:
+                self.reconStepWindow.freeze_image_buffer()
+            except Exception:
+                traceback.print_exc()
         # We close shared memory as long as the backend is terminated either normally or 
         # abnormally. The subtlety here is that the monitor should still be able to access
         # the intermediate results after mmaps' are closed. A potential segfault is avoided 
@@ -1065,6 +1070,8 @@ class MainWindow(QtWidgets.QMainWindow, ui_ptycho.Ui_MainWindow):
                         elif it == -2: #self.param.n_iterations+1:
                             # reserve it=n_iterations+1 as the working space
                             self.reconStepWindow.current_max_iters = self.param.n_iterations
+                            self.reconStepWindow.slider_iters.setMaximum(self.param.n_iterations + 1)
+                            self.reconStepWindow.sb_iter.setMaximum(self.param.n_iterations + 1)
 
                             p = self.param
                             if not p.postprocessing_flag:
