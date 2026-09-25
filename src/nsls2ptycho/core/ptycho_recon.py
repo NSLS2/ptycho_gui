@@ -1,7 +1,7 @@
 from PyQt5 import QtCore
 from datetime import datetime
 from .ptycho_param import Param
-import sys, os, getpass, uuid
+import sys, os, getpass, uuid, shlex
 import pickle     # dump param into disk
 import subprocess # call mpirun from shell
 from fcntl import fcntl, F_GETFL, F_SETFL
@@ -43,7 +43,7 @@ class PtychoReconSlurmQueue:
     def export_slurm_header(self):
         slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.uuid
         with open(slurm_header, 'w') as f:
-            f.write(self.remote_path+' '+str(len(self.param.gpus))+' '+str(self.n_parallel)+'\n')
+            f.write(shlex.quote(self.remote_path)+' '+str(len(self.param.gpus))+' '+str(self.n_parallel)+'\n')
 
     def clear(self):
         flist = [f for f in os.listdir(os.path.join(os.path.expanduser("~"),".ptycho_gui")) if f.startswith('.ptycho_slurm_job')]
@@ -157,7 +157,7 @@ class PtychoReconRemote(QtCore.QThread):
     def export_slurm_header(self):
         slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.uuid
         with open(slurm_header, 'w') as f:
-            f.write(self.remote_path+' '+str(len(self.param.gpus))+'\n')
+            f.write(shlex.quote(self.remote_path)+' '+str(len(self.param.gpus))+'\n')
 
     def clear_slurm_header(self):
         slurm_header = os.path.expanduser("~") + "/.ptycho_gui/.ptycho_slurm_job" + self.uuid

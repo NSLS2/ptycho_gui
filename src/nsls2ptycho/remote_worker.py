@@ -1,4 +1,4 @@
-import os,sys,socket,time,signal,subprocess,getpass
+import os,sys,socket,time,signal,subprocess,getpass,shlex
 from .core.utils import *
 from .core.ptycho.utils import *
 from fcntl import fcntl, F_GETFL, F_SETFL
@@ -320,7 +320,7 @@ class recon_worker_slurm:
                 #SBATCH --partition=normal
                 #SBATCH --error={self.base_dir + "/.ptycho_slurm.err"}
                 #SBATCH --output={self.base_dir + "/.ptycho_slurm.out"}
-                {sys.executable} -W ignore -m {parent_module}.remote_worker {self.remote_config_path} 5  {uuid} # <monitor_path> <timeout> <uuid>
+                {shlex.quote(sys.executable)} -W ignore -m {parent_module}.remote_worker {shlex.quote(self.remote_config_path)} 5 {uuid} # <monitor_path> <timeout> <uuid>
             ''').strip()
 
         with open(sbatch_script_path,'w') as f:
@@ -361,7 +361,7 @@ class recon_worker_slurm:
                 if not any(job['uuid'] == uuid for job in self.job_list):
                     try:
                         with open(os.path.join(self.base_dir,fname),'r') as f:
-                            l = f.readlines()[0].split()
+                            l = shlex.split(f.readlines()[0])
                     except:
                         l = None
                     if l is not None:
